@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { extname, join, dirname } from 'node:path';
-import { readFileSync, renameSync, unlinkSync, existsSync } from 'node:fs';
+import { readFileSync, renameSync, unlinkSync, existsSync, openSync, readSync, closeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderLabel, POSITIONS, THEMES, ALT_MISSING } from './render.mjs';
 import { over, parseHex, contrastRatio } from './contrast.mjs';
@@ -99,10 +99,66 @@ export const PHONE_WIDTH = 390;
 
 // Label height for an image: about 6% of the shorter side and at least 2.5% of the longer side
 // (so tall 9:16 covers and wide banners still get a visible label), between 28 and 512 px.
+// The largest image stamped, in pixels (about 7070×7070, or 8660×5770 at 3:2). Decoding is capped at
+// this too, so a small file that claims huge dimensions cannot exhaust memory.
+export const MAX_PIXELS = 50_000_000;
+const LIMIT = { limitInputPixels: MAX_PIXELS };
+// Raster formats as sharp names them ("heif" is AVIF). SVG, PDF and the rest are refused: a vector
+// file can ask for any size, and none of them is a photo to label.
+const RASTER = ['jpeg', 'png', 'webp', 'heif', 'tiff', 'gif'];
+const notRaster = (format) => `${format} input is not stamped; export the image as PNG, JPG or WebP first (stamp takes jpg, png, webp, avif, tiff, and still gif)`;
+
+// SVG and other XML start with "<" (after an optional BOM and white space); every raster format
+// starts with a binary signature. Checked before sharp sees the file, which would render an SVG.
+function looksLikeMarkup(input) {
+  let head;
+  if (Buffer.isBuffer(input)) head = input.subarray(0, 256);
+  else {
+    let fd;
+    try {
+      fd = openSync(input, 'r');
+      head = Buffer.alloc(256);
+      head = head.subarray(0, readSync(fd, head, 0, 256, 0));
+    } catch {
+      return false;
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+  }
+  return /^(﻿)?\s*</.test(head.toString('utf8'));
+}
+
 export const autoHeight = (w, h) => Math.min(512, Math.max(28, Math.round(Math.min(w, h) * 0.06), Math.round(Math.max(w, h) * 0.025)));
 
 export async function stampImage(input, output, opts = {}) {
   const format = formatFor(output);
+  const { pipeline, result } = await compose(input, opts);
+  // Write next to the output and rename, so nobody sees a half-written file.
+  const part = `${output}.part`;
+  try {
+    await format.apply(pipeline).toFile(part);
+    renameSync(part, output);
+  } catch (e) {
+    if (existsSync(part)) unlinkSync(part);
+    throw e;
+  }
+  return { output, ...result };
+}
+
+// The same stamp on an image held in memory (a download, a base64 upload, a generator's output).
+// Returns the labelled image as a Buffer with its MIME type; nothing is written to disk. The format
+// is opts.format (jpeg, png, webp, avif, tiff) or, by default, the input's own.
+export async function stampBuffer(buffer, opts = {}) {
+  if (!Buffer.isBuffer(buffer)) throw new UsageError('stampBuffer takes a Buffer with the image');
+  const { pipeline, result, meta } = await compose(buffer, opts);
+  const type = TYPES[normalType(opts.format ?? meta.format)];
+  const out = await type.apply(pipeline).toBuffer();
+  return { buffer: out, mimeType: type.mime, format: type.name, ...result };
+}
+
+// Reads the image (a path or a Buffer), sizes and places the label, and builds the sharp pipeline
+// with the label and the XMP; the caller picks the output format and where it goes.
+async function compose(input, opts) {
   const sharp = await loadSharp();
   const position = opts.position ?? 'top-left';
   if (!POSITIONS.includes(position)) throw new UsageError(`position must be one of: ${POSITIONS.join(', ')}`);
@@ -118,16 +174,29 @@ export async function stampImage(input, output, opts = {}) {
     }
     if (opts.height != null) throw new UsageError('pass --height or --display-width, not both');
   }
+  const name = Buffer.isBuffer(input) ? 'the image' : input;
 
-  // Pixels after EXIF rotation, for the size and for picking the theme.
+  // The header first: format, size and frames are known before a single pixel is decoded, so a
+  // vector file or a pixel bomb is refused without the memory it would take.
   let data, info, meta;
+  if (looksLikeMarkup(input)) throw new UsageError(notRaster('SVG'));
   try {
-    meta = await sharp(input).metadata();
-    if ((meta.pages ?? 1) <= 1) ({ data, info } = await sharp(input).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true }));
+    meta = await sharp(input, LIMIT).metadata();
   } catch (e) {
-    throw new Error(`could not read ${input}: ${e.message}`);
+    if (/pixel limit/i.test(e.message)) throw new UsageError(`the image is over the ${MAX_PIXELS / 1e6} megapixel limit; scale it down first`);
+    throw new Error(`could not read ${name}: ${e.message}`);
   }
+  if (!RASTER.includes(meta.format)) throw new UsageError(notRaster(String(meta.format ?? 'this').toUpperCase()));
   if ((meta.pages ?? 1) > 1) throw new UsageError(`animated images are not supported yet (${meta.pages} frames); export a still frame, or wait for video labels`);
+  if (meta.width * meta.height > MAX_PIXELS) {
+    throw new UsageError(`the image is ${meta.width}×${meta.height} px, over the ${MAX_PIXELS / 1e6} megapixel limit; scale it down first`);
+  }
+  // Pixels after EXIF rotation, for the size and for picking the theme.
+  try {
+    ({ data, info } = await sharp(input, LIMIT).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true }));
+  } catch (e) {
+    throw new Error(`could not read ${name}: ${e.message}`);
+  }
   const existingXmp = meta.xmp?.toString('utf8').replace(/\0+$/, '');
   const previous = labelledAs(existingXmp);
   if (previous != null && !parseBoolean(opts.force, '--force')) {
@@ -167,22 +236,11 @@ export async function stampImage(input, output, opts = {}) {
 
   // Keep the input's EXIF, ICC profile and XMP; always add the visible-label marker, and the
   // DigitalSourceType for AI labels unless --no-metadata.
-  let pipeline = sharp(input).rotate().composite([{ input: Buffer.from(label.svg), left, top }]).keepIccProfile().keepExif();
+  let pipeline = sharp(input, LIMIT).rotate().composite([{ input: Buffer.from(label.svg), left, top }]).keepIccProfile().keepExif();
   const tag = label.options.metadata && DIGITAL_SOURCE[label.options.kind];
   pipeline = pipeline.withXmp(mergeXmp(existingXmp, label.options.kind, { sourceType: tag || null }));
-  pipeline = format.apply(pipeline);
-  // Write next to the output and rename, so nobody sees a half-written file.
-  const part = `${output}.part`;
-  try {
-    await pipeline.toFile(part);
-    renameSync(part, output);
-  } catch (e) {
-    if (existsSync(part)) unlinkSync(part);
-    throw e;
-  }
 
-  return {
-    output,
+  const result = {
     image: { width: W, height: H },
     label: {
       left,
@@ -207,6 +265,7 @@ export async function stampImage(input, output, opts = {}) {
         ? 'XMP ai-content-labels marker only: IPTC has no DigitalSourceType term for this label'
         : 'XMP ai-content-labels marker only (no DigitalSourceType, --no-metadata)',
   };
+  return { pipeline, result, meta };
 }
 
 // Mean sRGB colour of the pixels under the label, sampled on a grid.
@@ -225,19 +284,39 @@ function regionMean(data, info, left, top, w, h) {
   return n ? sum.map((s) => s / n) : [255, 255, 255];
 }
 
+// Output formats by name, with the MIME type and extension a buffer result reports.
+const TYPES = {
+  jpeg: { name: 'jpeg', mime: 'image/jpeg', ext: '.jpg', apply: (p) => p.jpeg({ quality: 92, mozjpeg: true }) },
+  png: { name: 'png', mime: 'image/png', ext: '.png', apply: (p) => p.png() },
+  webp: { name: 'webp', mime: 'image/webp', ext: '.webp', apply: (p) => p.webp({ quality: 92 }) },
+  avif: { name: 'avif', mime: 'image/avif', ext: '.avif', apply: (p) => p.avif({ quality: 70 }) },
+  tiff: { name: 'tiff', mime: 'image/tiff', ext: '.tiff', apply: (p) => p.tiff() },
+};
+const EXTENSIONS = { '.jpg': 'jpeg', '.jpeg': 'jpeg', '.png': 'png', '.webp': 'webp', '.avif': 'avif', '.tif': 'tiff', '.tiff': 'tiff' };
+
+// A format name, MIME type or sharp's metadata.format ("heif" for AVIF) as a key of TYPES. Anything
+// else (gif, svg) becomes png, a still format every platform takes.
+export function normalType(type) {
+  const t = String(type ?? '')
+    .toLowerCase()
+    .replace(/^image\//, '')
+    .replace(/;.*$/, '');
+  if (t === 'jpg' || t === 'pjpeg') return 'jpeg';
+  if (t === 'heif' || t === 'heic') return 'avif';
+  if (t === 'tif') return 'tiff';
+  return TYPES[t] ? t : 'png';
+}
+
+// The name, MIME type and file extension of a format.
+export const typeInfo = (type) => {
+  const { name, mime, ext } = TYPES[normalType(type)];
+  return { name, mime, ext };
+};
+
 export function formatFor(output) {
   const ext = extname(output).toLowerCase();
-  const map = {
-    '.jpg': (p) => p.jpeg({ quality: 92, mozjpeg: true }),
-    '.jpeg': (p) => p.jpeg({ quality: 92, mozjpeg: true }),
-    '.png': (p) => p.png(),
-    '.webp': (p) => p.webp({ quality: 92 }),
-    '.avif': (p) => p.avif({ quality: 70 }),
-    '.tif': (p) => p.tiff(),
-    '.tiff': (p) => p.tiff(),
-  };
-  const apply = map[ext];
   if (ext === '.gif') throw new UsageError('GIF output is not supported; pass --out name.png or name.webp');
-  if (!apply) throw new UsageError(`unsupported output format "${ext || '(none)'}"; use .jpg, .png, .webp, .avif or .tiff`);
-  return { apply };
+  const type = TYPES[EXTENSIONS[ext]];
+  if (!type) throw new UsageError(`unsupported output format "${ext || '(none)'}"; use .jpg, .png, .webp, .avif or .tiff`);
+  return { apply: type.apply, mime: type.mime };
 }

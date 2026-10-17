@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/JK-G/ai-content-labels/actions/workflows/test.yml/badge.svg)](https://github.com/JK-G/ai-content-labels/actions/workflows/test.yml)
 
-Labels for AI-generated and human-made content, built on the official EU icons. ai-content-labels tells you whether the EU AI Act requires a label and draws one that keeps WCAG contrast on any background. It burns the label into images, writes it as HTML for web pages and hands you the alt text. It ships as a CLI, an MCP server and a skill for Claude Code and other agents.
+Labels for AI-generated and human-made content, built on the official EU icons, for any AI agent. It fits agents that generate images best. They already know the image is AI, so one call (`ai-labels label` or the MCP tool `label_image`) tells them whether the EU AI Act requires a label and burns it into the image. ai-content-labels also draws labels that keep WCAG contrast on any background, writes them as HTML for web pages and hands you the alt text. It ships as a CLI, an MCP server (stdio and HTTP), a Node library and an Agent Skill that works in Codex, Gemini CLI, Copilot, Cursor and Claude Code.
 
 ![Labels in a light and a dark theme: "Generated with AI" with an image icon, "Modified with AI" with image and voice icons, a custom "Voice generated with AI", an AI label next to a "Human-made" label, a Polish label and an upper-case label](docs/labels.png)
 
@@ -16,6 +16,7 @@ The icons leave the practical questions open. Does this image need a label at al
 
 ## What it does
 
+- **`label`** is the one-call version for an image an agent has just generated or edited. You say whether people could take it for real; it runs `decide` and stamps the label `decide` picked. Voluntary labels are stamped too, unless you pass `--only-if-required`. Over MCP it is `label_image`, which also takes the image as a URL or base64 and can return the labelled image instead of writing a file.
 - **`decide`** goes through the Article 50(4) questions: would the audience take the content for real, is it an artistic work, is the text published on a matter of public interest, did a person review it. It returns whether the label is a duty or a voluntary choice, which label fits (and the official EU icon with the same meaning), where to place it, the label sentence and the next step, as a command and, in JSON and over MCP, as the tool call to make. When a deciding fact is missing, it asks one question instead of guessing. The answer is a few lines; `--explain` adds the legal basis, notes and sources.
 - **`stamp`** burns the label into a JPG, PNG, WebP, AVIF or TIFF, so it survives downloads and reshares as the EU guidance asks. You always say which label (`--kind`); stamp never assumes "Generated with AI". The label height follows the image (about 6% of the shorter side and at least 2.5% of the longer side, never below 28 px or above 512 px), its colour is the one that stands out more from the corner it sits in. Those are the file's pixels: for an image shown smaller, such as a post full width on a phone, pass `--display-width 390` and the label stays at least 28 px tall on that screen. For generated and modified labels an IPTC DigitalSourceType tag goes into the XMP; basic and human-made labels get only the project's marker, because the IPTC vocabulary has no term for them.
 - **`render`** draws the same label as SVG, PNG or WebP, with `role="img"`, `lang` and an `aria-label`. With `--format html` it writes the label as real text and inline icons, for web pages and apps.
@@ -23,34 +24,60 @@ The icons leave the practical questions open. Does this image need a label at al
 - **`eu`** gives you the twelve official EU files, unchanged.
 - **Languages:** English and Polish wording is built in. For the other 22 official EU languages, pass `--lang` with your own `--text` in that language (`--lang de --text "Mit KI generiert"`), so screen readers read the label with the right voice.
 
-## Install
+## Use it with your agent
 
-As a Claude Code plugin (skill and MCP server):
+Requires Node.js 20.9 or newer. Drawing SVG labels and `decide` need nothing else. Stamping and PNG output use [sharp](https://sharp.pixelplumbing.com), an optional dependency that npm installs with the package.
+
+| Agent or tool | Way in | Setup |
+|---|---|---|
+| Claude Code | Plugin: skill and MCP server | [Claude Code](#claude-code) |
+| Codex, Gemini CLI, GitHub Copilot in VS Code, Cursor | Agent Skill, or the MCP server | [Agent Skill](#agent-skill), [MCP server](#mcp-server) |
+| Claude Desktop, Windsurf (Devin Desktop) | MCP server | [MCP server](#mcp-server) |
+| OpenAI Agents SDK, Vercel AI SDK, LangChain | MCP server from code | [In code](#in-code) |
+| n8n, ChatGPT apps, cloud agents | MCP server in HTTP mode | [HTTP mode](#http-mode) |
+| Scripts, CI, ComfyUI | CLI | [CLI](#cli) |
+| Your own Node.js code | Library | [Node library](#node-library) |
+
+Our test suite covers the CLI, the library, the stdio MCP server and the HTTP mode on Windows, macOS and Linux. The client setups below follow each client's documentation; we have not run them in every client, so treat the ones marked untested as a starting point.
+
+### Claude Code
 
 ```
 /plugin marketplace add JK-G/ai-content-labels
 /plugin install ai-content-labels@ai-content-labels
 ```
 
-As a plain skill, without the plugin system:
+The plugin system does not run npm, so after a plugin install ask Claude to "run ai-content-labels doctor" and it will tell you the one command that adds sharp.
+
+### Agent Skill
+
+The skill folder works in any agent that reads [Agent Skills](https://agentskills.io/specification). Per the vendors' docs, Codex, Gemini CLI, Copilot in VS Code and Cursor read `~/.agents/skills/`, and Claude Code reads `~/.claude/skills/`; check your client's docs if the skill does not show up. For one project only, use `.agents/skills/` inside it.
 
 ```
 git clone https://github.com/JK-G/ai-content-labels
-cp -r ai-content-labels/skills/ai-content-labels ~/.claude/skills/
-cd ~/.claude/skills/ai-content-labels && npm install sharp@0.35
+mkdir -p ~/.agents/skills
+cp -r ai-content-labels/skills/ai-content-labels ~/.agents/skills/
+cd ~/.agents/skills/ai-content-labels && npm install sharp@0.35
 ```
 
-On Windows PowerShell, use `Copy-Item -Recurse ai-content-labels\skills\ai-content-labels $HOME\.claude\skills\` for the copy. The last step adds sharp to the copied skill; you can skip it if you only need SVG labels and `decide`. The folder carries its own licence notices (`NOTICE.md`), so copy it whole.
+On Windows PowerShell, copy with `Copy-Item -Recurse ai-content-labels\skills\ai-content-labels $HOME\.agents\skills\`. The last step adds sharp to the copied skill; skip it if you only need SVG labels and `decide`. The folder carries its own licence notices (`NOTICE.md`), so copy it whole.
 
-From a shell, without cloning:
+### MCP server
 
+Every client starts the same command: `npx -y -p github:JK-G/ai-content-labels ai-content-labels-mcp`. The first start downloads the package and sharp, which can take a minute. On Windows some clients need `"command": "cmd"` with `"/c", "npx"` at the start of the arguments.
+
+Codex (untested), in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.ai-content-labels]
+command = "npx"
+args = ["-y", "-p", "github:JK-G/ai-content-labels", "ai-content-labels-mcp"]
+startup_timeout_sec = 60
 ```
-npx -y github:JK-G/ai-content-labels stamp photo.jpg --kind generated --media image --description "what it shows"
-```
 
-Installed with npm (`npm install -g github:JK-G/ai-content-labels`), the command is `ai-labels`, also available as `ai-content-labels`.
+or `codex mcp add ai-content-labels -- npx -y -p github:JK-G/ai-content-labels ai-content-labels-mcp`.
 
-As an MCP server in Claude Desktop, Cursor or another client:
+Gemini CLI (`~/.gemini/settings.json`), Claude Desktop (`claude_desktop_config.json`) and Windsurf (`mcp_config.json`), untested:
 
 ```json
 {
@@ -63,13 +90,127 @@ As an MCP server in Claude Desktop, Cursor or another client:
 }
 ```
 
-Requires Node.js 20.9 or newer. Drawing SVG labels and `decide` have no dependencies. Stamping and PNG output use [sharp](https://sharp.pixelplumbing.com), an optional dependency that npm installs with the package. The plugin system does not run npm, so after a plugin install ask Claude to "run ai-content-labels doctor" and it will tell you the one command to run.
+Cursor (`.cursor/mcp.json`) takes the same block with `"type": "stdio"` added. VS Code (`.vscode/mcp.json`) names the top key `servers` (untested):
+
+```json
+{
+  "servers": {
+    "ai-content-labels": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "-p", "github:JK-G/ai-content-labels", "ai-content-labels-mcp"]
+    }
+  }
+}
+```
+
+The tools are `label_image`, `decide_label`, `render_label`, `stamp_image` and `eu_icon`. Each has an output schema and returns structured content next to the same JSON as text. The server speaks MCP 2024-11-05 to 2025-11-25 (clients that start with `initialize`) and 2026-07-28 (`server/discover` and per-request metadata).
+
+### In code
+
+These pass the same command to the framework's MCP client. All untested.
+
+OpenAI Agents SDK (Python):
+
+```python
+from agents.mcp import MCPServerStdio
+
+labels = MCPServerStdio(params={"command": "npx", "args": ["-y", "-p", "github:JK-G/ai-content-labels", "ai-content-labels-mcp"]})
+```
+
+Vercel AI SDK, with the stdio transport from the MCP TypeScript SDK (`@modelcontextprotocol/sdk`):
+
+```js
+import { createMCPClient } from '@ai-sdk/mcp';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+const labels = await createMCPClient({
+  transport: new StdioClientTransport({ command: 'npx', args: ['-y', '-p', 'github:JK-G/ai-content-labels', 'ai-content-labels-mcp'] }),
+});
+```
+
+LangChain (`langchain-mcp-adapters`):
+
+```python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+client = MultiServerMCPClient({"labels": {"command": "npx", "args": ["-y", "-p", "github:JK-G/ai-content-labels", "ai-content-labels-mcp"], "transport": "stdio"}})
+```
+
+The Agents SDK can also reach the server in HTTP mode with `MCPServerStreamableHttp`.
+
+### HTTP mode
+
+For clients that cannot start a local process:
+
+```
+npx -y -p github:JK-G/ai-content-labels ai-content-labels-mcp --http
+```
+
+It serves Streamable HTTP on `http://127.0.0.1:8787/mcp` with JSON responses. The defaults are the safe ones:
+
+- It listens on 127.0.0.1 only. `--host 0.0.0.0` (or any other address) also needs `--token <secret>` (or `AI_CONTENT_LABELS_TOKEN`), and every request must then send `Authorization: Bearer <secret>`.
+- File paths are off. Images come in as an https URL or base64 and go back as image content in the result. `--allow-files` turns paths on when the server runs on your own machine.
+- Plain http URLs, and URLs that point at loopback or private addresses, are refused, so the server cannot be used to read your network. (The CLI, the stdio server and the library also fetch http URLs.)
+- At most 3 tool calls run at once; more get 503 with `Retry-After`. Images over 50 megapixels, and SVG input, are refused before they are decoded.
+- Browser requests need `--allow-origin <origin>`; any other Origin header gets 403.
+
+The built-in n8n MCP Client node speaks HTTP only, so point it at the `/mcp` address with the bearer token. ChatGPT apps and connectors need a public HTTPS address: run HTTP mode behind a TLS proxy with a token. We have not tested either.
+
+### CLI
+
+```
+npx -y -p github:JK-G/ai-content-labels ai-labels label image.png --realistic --description "what it shows"
+```
+
+Installed with npm (`npm install -g github:JK-G/ai-content-labels`), the command is `ai-labels`, also available as `ai-content-labels`. From a clone, run `node skills/ai-content-labels/scripts/ai-labels.mjs`.
+
+### Node library
+
+```js
+import { labelImage } from 'ai-content-labels';
+
+const result = await labelImage(imageBuffer, { realistic: true, description: 'What the image shows' });
+// result.buffer: the labelled image; result.alt: the alt text to publish; result.required: a legal duty or not
+```
+
+`labelImage` also takes a file path or an http(s) URL. The package exports `decide`, `renderLabel`, `renderHtml`, `stampImage`, `stampBuffer` and `officialIcon` as well.
+
+## After your agent generates an image
+
+Run `ai-labels init --write` once in a project. It adds a short block to `AGENTS.md`, or to the file you name with `--file`, such as `GEMINI.md`. The block tells the agent to label every image it makes for publication, to answer the realism question honestly and to publish the alt text. Running it again updates the block in place.
+
+Where the common image tools put their files, and the step after each:
+
+- **Codex.** Per Codex's imagegen skill, built-in image generation saves to `$CODEX_HOME/generated_images/<session>/`; check the Codex docs for your version. Copy the image into the workspace, then run `ai-labels label <file> --realistic` or `--no-realistic`. Untested.
+- **Gemini CLI with the nanobanana extension.** Images land in `./nanobanana-output/`; run `ai-labels label nanobanana-output/<file>` with the realism answer. Untested.
+- **OpenAI Agents SDK.** The image generation tool returns base64. Pass it to `label_image` as `input_base64` and take the labelled image from the image content of the result, or save it and run the CLI. Untested.
+- **ComfyUI.** Images go to `ComfyUI/output`. Add a step after the queue finishes that runs `ai-labels label` on the new file. Untested.
+- **n8n.** Use HTTP mode with the MCP Client node, or an Execute Command node that writes the binary to disk and runs `ai-labels label`. Untested.
+- **C2PA.** Stamping changes the pixels, so stamp first and sign after. Run `ai-labels label` with `--out`. Then, in the manifest you sign the labelled file with using `c2patool`, add a `c2pa.created` action whose `digitalSourceType` is `http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia` (generated) or `compositeWithTrainedAlgorithmicMedia` (modified). c2patool writes only what your manifest contains. A manifest signed before the stamp no longer verifies. Untested.
 
 ## Quick start
 
-In Claude Code, ask in your own words: "label this image as AI-generated", "does this AI photo need a label under the AI Act?", or in Polish "oznacz tę grafikę jako wygenerowaną przez AI". The skill works out the facts, runs `decide`, stamps or renders the label and gives you the alt text to publish.
+Ask your agent in your own words: "label this image as AI-generated", "does this AI photo need a label under the AI Act?", or in Polish "oznacz tę grafikę jako wygenerowaną przez AI". The skill works out the facts, runs `decide`, stamps or renders the label and gives you the alt text to publish.
 
 From the command line. `ai-labels` is the command the package installs; from a clone, run `node skills/ai-content-labels/scripts/ai-labels.mjs` instead.
+
+For an image an agent just made, `label` decides and stamps in one step:
+
+```
+$ ai-labels label portrait.png --realistic --description "Portrait of a woman in a linen shirt, studio light"
+REQUIRED: realistic AI image, a deep fake under Article 50(4)
+portrait.ai-label.png
+label: 363×61 px, dark pill, top-left, text contrast 12.55:1, stands out 7.18:1 from the image
+display: 24 px tall or more when the image is shown 403 px wide or wider; shown narrower, as on a phone, it is smaller: pass --display-width 390
+disclosure: Generated with AI: image.
+alt: Portrait of a woman in a linen shirt, studio light. Generated with AI: image.
+metadata: XMP DigitalSourceType trainedAlgorithmicMedia
+```
+
+`--modified` is for a real photo that AI changed. With `--no-realistic` the label is voluntary and `label` still stamps it; `--only-if-required` skips it. Without either answer it asks the question below and exits with code 2.
+
+For anything else, start with `decide`:
 
 ```
 $ ai-labels decide --media image --origin generated

@@ -144,7 +144,7 @@ test('MCP server: initialize, list tools, call one', async () => {
   server.kill();
   const byId = Object.fromEntries(replies.map((r) => [r.id, r]));
   assert.equal(byId[1].result.serverInfo.name, 'ai-content-labels');
-  assert.deepEqual(byId[2].result.tools.map((t) => t.name), ['decide_label', 'render_label', 'stamp_image', 'eu_icon']);
+  assert.deepEqual(byId[2].result.tools.map((t) => t.name), ['label_image', 'decide_label', 'render_label', 'stamp_image', 'eu_icon']);
   assert.equal(JSON.parse(byId[3].result.content[0].text).officialIcon, 'modified');
   assert.equal(byId[4].result.isError, true);
   assert.equal(byId[5].error.code, -32601);

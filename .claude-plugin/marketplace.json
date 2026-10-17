@@ -9,7 +9,7 @@
     {
       "name": "ai-content-labels",
       "source": "./",
-      "description": "Label AI-generated and human-made content with the official EU icons: decide what the AI Act asks for, draw the label with WCAG contrast, burn it into images and get the alt text"
+      "description": "Label AI-generated and human-made content with the official EU icons, from any AI agent: decide what the AI Act asks for, burn the label into images in one call and get the alt text"
     }
   ]
 }

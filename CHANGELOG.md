@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0 (2026-10-17)
+
+Works with any agent, and in one call for agents that generate images.
+
+- `label <image> --realistic|--no-realistic`: decides the label for an AI image (generated, or modified with `--modified`) and stamps it in one step. Without the realism answer it asks the same question as `decide` and exits with code 2. It stamps voluntary labels too; `--only-if-required` skips them. Also takes `--creative`, `--lang`, `--text`, `--description`, `--position`, `--display-width`, `--out`, `--force` and `--no-metadata`. `<image>` can be an http(s) URL with `--out`.
+- MCP tool `label_image`, the same step for agents: `realistic` is required, the image comes as `input` (file path or http(s) URL) or `input_base64` (with optional `mime`), and `return_image` adds the labelled image as image content. Base64 or URL input without `out` writes nothing and returns the image.
+- `stamp_image` also takes an http(s) URL or `input_base64`, and `return_image`. Downloads: http and https (https only in HTTP mode), up to 5 redirects, 50 MB, 30 s for the whole download, never through a proxy from the environment. Stamping refuses SVG input and images over 50 megapixels before decoding them.
+- Every MCP tool has a `title`, an `outputSchema` and returns `structuredContent` next to the same JSON as text.
+- MCP protocol 2026-07-28 next to the earlier ones: `server/discover`, per-request `_meta` with the protocol version, `resultType` and `serverInfo` in results, and `UnsupportedProtocolVersion` (-32022) errors listing the supported versions. Clients that start with `initialize` work as before; `initialize` now also accepts 2025-11-25.
+- HTTP mode: `ai-content-labels-mcp --http [--port 8787] [--host 127.0.0.1] [--token <secret>] [--allow-files] [--allow-origin <origin>]`. Streamable HTTP on `POST /mcp` with JSON responses, 202 for notifications, 405 for GET and DELETE, header checks for 2026-07-28 requests (-32020 on a mismatch). Bound to 127.0.0.1 by default; any other address needs a bearer token (`--token` or `AI_CONTENT_LABELS_TOKEN`). Requests with an Origin header that is not allowed get 403, and on localhost the Host header must be local. File paths are off unless `--allow-files`, and plain http URLs and URLs that point at loopback or private addresses are refused. At most 3 tool calls run at once (503 with `Retry-After` beyond that), and a malformed request gets an error response instead of stopping the server. Over MCP, error messages name the argument (`text`) with the CLI option in brackets.
+- `init [--write] [--file AGENTS.md]`: a short block for AGENTS.md, GEMINI.md or Copilot instructions that tells agents to label the images they make. `--write` adds it between marker comments and updates it in place on the next run.
+- Node library: `import { labelImage, stampBuffer, decide, renderLabel, renderHtml, stampImage, officialIcon } from 'ai-content-labels'`. `stampBuffer` labels an image held in memory and returns a Buffer.
+- The skill follows the Agent Skills format (`name`, `description`, `license`, `metadata`) and runs from its own folder or through `npx`, so Codex, Gemini CLI, Copilot and Cursor can use it as well as Claude Code. It puts `label` first for images the agent made itself.
+- README: setup for each agent and recipes for what to do after an agent generates an image.
+
 ## 0.1.0 (unreleased)
 
 First public version: images and labels for web pages.

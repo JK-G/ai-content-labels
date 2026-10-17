@@ -1,8 +1,9 @@
-import { writeFileSync, mkdirSync, copyFileSync, existsSync, statSync } from 'node:fs';
+import { writeFileSync, mkdirSync, copyFileSync, existsSync, statSync, readFileSync } from 'node:fs';
 import { dirname, extname, join, basename, resolve } from 'node:path';
 import { renderLabel, officialIcon, normalize, labelSentence, composeAlt, altMissing } from './render.mjs';
 import { renderHtml, LABEL_CSS } from './html.mjs';
-import { stampImage, loadSharp, formatFor } from './stamp.mjs';
+import { stampImage, stampBuffer, loadSharp, formatFor } from './stamp.mjs';
+import { isUrl, fetchImage, decodeBase64 } from './source.mjs';
 import { decide } from './decide.mjs';
 import { UsageError, sentence, parseBoolean } from './i18n.mjs';
 import { ASSETS_DIR, mediaIcons } from './assets.mjs';
@@ -68,10 +69,9 @@ async function renderHtmlLabel(opts) {
 // Outputs being written right now, so two parallel calls cannot both pass the "exists" check.
 const inFlight = new Set();
 
-export async function stamp(input, opts = {}) {
-  if (!input) throw new UsageError('stamp needs an input image');
-  // The label is a public claim burned into the file: never default it. render keeps a default kind,
-  // because it writes nothing into the user's content.
+// The label is a public claim burned into the file: never default it. render keeps a default kind,
+// because it writes nothing into the user's content.
+function requireKind(opts) {
   if (opts.kind == null) {
     throw new UsageError(
       'stamp needs --kind generated, modified, basic or human. Not sure which? Run: ai-labels decide --media image --origin generated|modified|assisted|human'
@@ -79,6 +79,11 @@ export async function stamp(input, opts = {}) {
   }
   // Label options first: a contradictory label is the user's first problem, not an existing output.
   normalize({ ...opts, height: opts.height ?? 32 });
+}
+
+export async function stamp(input, opts = {}) {
+  if (!input) throw new UsageError('stamp needs an input image');
+  requireKind(opts);
   const source = resolve(input);
   if (!existsSync(source)) throw new UsageError(`input not found: ${input}`);
   if (statSync(source).isDirectory()) {
@@ -93,16 +98,60 @@ export async function stamp(input, opts = {}) {
   if (/\.ai-label\.[^.]+$/i.test(basename(source)) && !force) {
     throw new UsageError(`already labelled by name (${basename(source)}); stamp the original instead, or pass --force`);
   }
+  return writeStamped(source, output, opts, force);
+}
+
+// Writes the stamped image (from a path or a Buffer) to output, refusing to overwrite unless forced.
+async function writeStamped(input, output, opts, force) {
+  formatFor(output);
   const key = process.platform === 'win32' ? output.toLowerCase() : output;
   if (inFlight.has(key)) throw new UsageError(`${output} is being written by another call`);
   if (existsSync(output) && !force) throw new UsageError(`${output} exists; pass --force to overwrite`);
   inFlight.add(key);
   try {
     mkdirSync(dirname(output), { recursive: true });
-    return await stampImage(source, output, { ...opts, force });
+    return await stampImage(input, output, { ...opts, force });
   } finally {
     inFlight.delete(key);
   }
+}
+
+export const FILES_OFF =
+  'file paths are turned off on this server (HTTP mode): pass input as an https URL or input_base64, leave out out, and take the labelled image from the result; or start the server with --allow-files';
+
+// Where the image comes from: opts.input as a Buffer, an http(s) URL or a file path, or
+// opts.inputBase64. policy.allowFiles false refuses paths; policy.allowPrivate false refuses URLs
+// that point at loopback or private addresses; policy.httpsOnly refuses plain http.
+export async function resolveSource(opts, { allowFiles = true, allowPrivate = true, httpsOnly = false } = {}) {
+  const given = (opts.input != null) + (opts.inputBase64 != null);
+  if (given !== 1) throw new UsageError(given ? 'pass input or input_base64, not both' : `pass input (a file path or an ${httpsOnly ? 'https' : 'http(s)'} URL) or input_base64`);
+  if (opts.mime != null && !/^image\/[a-z0-9.+-]+$/i.test(opts.mime)) throw new UsageError(`mime must be an image type such as image/png, not "${opts.mime}"`);
+  if (opts.inputBase64 != null) return decodeBase64(opts.inputBase64, opts.mime);
+  if (Buffer.isBuffer(opts.input)) return { buffer: opts.input, mime: opts.mime ?? null };
+  if (typeof opts.input !== 'string' || !opts.input) throw new UsageError('input must be a file path, an http(s) URL or a Buffer');
+  if (isUrl(opts.input)) return fetchImage(opts.input, { allowPrivate, httpsOnly });
+  if (!allowFiles) throw new UsageError(FILES_OFF);
+  return { path: opts.input };
+}
+
+// stamp for every kind of source. A path keeps stamp's behaviour (default output next to the input);
+// a URL, base64 or Buffer is written only to opts.out, and otherwise comes back as a Buffer.
+// Returns { result, image }: image ({ buffer, mimeType }) when nothing was written or
+// opts.returnImage is true, else null. result.output is the absolute path or null.
+export async function stampFrom(opts = {}, policy = {}) {
+  requireKind(opts);
+  if (opts.out != null && policy.allowFiles === false) throw new UsageError(FILES_OFF);
+  const want = parseBoolean(opts.returnImage, 'return_image') ?? false;
+  const src = await resolveSource(opts, policy);
+  let result;
+  if (src.path) result = await stamp(src.path, opts);
+  else if (opts.out != null) result = await writeStamped(src.buffer, resolve(opts.out), opts, parseBoolean(opts.force, '--force') ?? false);
+  else {
+    const { buffer, mimeType, format, ...rest } = await stampBuffer(src.buffer, opts);
+    return { result: { output: null, mimeType, ...rest }, image: { buffer, mimeType } };
+  }
+  const mimeType = formatFor(result.output).mime;
+  return { result: { ...result, mimeType }, image: want ? { buffer: readFileSync(result.output), mimeType } : null };
 }
 
 export function decideLabel(opts) {

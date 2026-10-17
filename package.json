@@ -1,7 +1,7 @@
 {
   "name": "ai-content-labels",
-  "version": "0.1.0",
-  "description": "Label AI-generated and human-made content with the official EU icons: pick the label the AI Act asks for, draw it with WCAG contrast, burn it into images, and get the alt text. CLI, MCP server and agent skill.",
+  "version": "0.2.0",
+  "description": "Label AI-generated and human-made content with the official EU icons, from any AI agent. Decide what the AI Act asks for, burn the label into images in one call, and get the alt text. CLI, MCP server (stdio and HTTP), Node library and Agent Skill.",
   "type": "module",
   "license": "MIT",
   "author": "JK-G (https://github.com/JK-G)",
@@ -9,6 +9,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/JK-G/ai-content-labels.git"
+  },
+  "exports": {
+    ".": "./skills/ai-content-labels/scripts/lib/index.mjs",
+    "./package.json": "./package.json"
   },
   "bin": {
     "ai-content-labels": "skills/ai-content-labels/scripts/ai-labels.mjs",
@@ -27,7 +31,7 @@
     "node": ">=20.9"
   },
   "scripts": {
-    "test": "node --test test/render.test.mjs test/decide.test.mjs test/stamp.test.mjs test/cli.test.mjs test/html.test.mjs test/mcp.test.mjs",
+    "test": "node --test test/render.test.mjs test/decide.test.mjs test/stamp.test.mjs test/cli.test.mjs test/html.test.mjs test/mcp.test.mjs test/label.test.mjs test/mcp-io.test.mjs test/http.test.mjs",
     "build-assets": "node tools/build-assets.mjs"
   },
   "optionalDependencies": {
@@ -49,6 +53,11 @@
     "accessibility",
     "mcp",
     "claude-code-plugin",
-    "agent-skill"
+    "agent-skill",
+    "agent-skills",
+    "codex",
+    "gemini-cli",
+    "ai-image",
+    "image-generation"
   ]
 }

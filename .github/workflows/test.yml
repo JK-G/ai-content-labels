@@ -26,6 +26,6 @@ jobs:
         run: npm ci
       - name: Syntax check
         shell: bash
-        run: find skills tools -name '*.mjs' -print0 | xargs -0 -n1 node --check
+        run: find skills tools test -name '*.mjs' -print0 | xargs -0 -n1 node --check
       - name: Test
         run: npm test

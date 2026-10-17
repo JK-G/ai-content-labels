@@ -73,7 +73,8 @@ test('every tool is strict and annotated', async () => {
     assert.ok(tool.annotations, tool.name);
   }
   const stampTool = r[1].result.tools.find((t) => t.name === 'stamp_image');
-  assert.deepEqual(stampTool.inputSchema.required, ['input', 'kind']);
+  // input or input_base64: exactly one, checked by the server
+  assert.deepEqual(stampTool.inputSchema.required, ['kind']);
   assert.ok(stampTool.inputSchema.properties.description && stampTool.inputSchema.properties.force);
 });
 

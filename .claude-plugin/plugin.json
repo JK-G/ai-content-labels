@@ -1,7 +1,7 @@
 {
   "name": "ai-content-labels",
-  "version": "0.1.0",
-  "description": "Label AI-generated and human-made content with the official EU icons: decide what the AI Act asks for, draw the label with WCAG contrast, burn it into images and get the alt text",
+  "version": "0.2.0",
+  "description": "Label AI-generated and human-made content with the official EU icons, from any AI agent: decide what the AI Act asks for, burn the label into images in one call and get the alt text",
   "author": {
     "name": "JK-G",
     "url": "https://github.com/JK-G"
@@ -9,5 +9,14 @@
   "homepage": "https://github.com/JK-G/ai-content-labels",
   "repository": "https://github.com/JK-G/ai-content-labels",
   "license": "MIT",
-  "keywords": ["ai-act", "ai-label", "ai-generated", "human-made", "wcag", "mcp"]
+  "keywords": [
+    "ai-act",
+    "ai-label",
+    "ai-generated",
+    "human-made",
+    "wcag",
+    "mcp",
+    "agent-skills",
+    "ai-image"
+  ]
 }

@@ -1,23 +1,54 @@
 ---
 name: ai-content-labels
-description: Label content as AI-generated, AI-modified or human-made with the official EU icons, and work out what Article 50 of the EU AI Act asks for. Use when the user asks to label, mark, tag, badge or disclose AI content or human-made content, in any wording or language (AI label, AI badge, "generated with AI" watermark, made by a human, AI Act labelling, Article 50 disclosure; Polish - oznacz jako AI, plakietka AI, oznaczenie treści AI, znak AI Act, stworzone przez człowieka), when they ask whether something must be labelled under the AI Act, and when an image, video, audio or text made or edited with AI is about to be published in a project that labels AI content. Burns the label into images, draws HTML, SVG or PNG labels for pages and UI, and returns the alt text to publish with the content.
+description: Label content as AI-generated, AI-modified or human-made with the official EU icons, and work out what Article 50 of the EU AI Act asks for. Use right after you generate or edit an image that will be published, and when the user asks to label, mark, tag, badge or disclose AI content or human-made content, in any wording or language (AI label, AI badge, "generated with AI" watermark, made by a human, AI Act labelling, Article 50 disclosure; Polish - oznacz jako AI, plakietka AI, oznaczenie treści AI, znak AI Act, stworzone przez człowieka), when they ask whether something must be labelled under the AI Act, and when an image, video, audio or text made or edited with AI is about to be published in a project that labels AI content. Labels an image in one call, draws HTML, SVG or PNG labels for pages and UI, and returns the alt text to publish with the content.
+license: MIT
+metadata:
+  version: "0.2.0"
+  homepage: https://github.com/JK-G/ai-content-labels
 ---
 
 # ai-content-labels
 
-Run the CLI from the project root:
+The CLI is `scripts/ai-labels.mjs` in this skill's folder. Run it with Node 20.9 or newer, using the
+absolute path of this folder, or from inside it:
 
 ```
-node "${CLAUDE_SKILL_DIR}/scripts/ai-labels.mjs" <command> [options]
+node scripts/ai-labels.mjs <command> [options]
 ```
+
+In Claude Code `${CLAUDE_SKILL_DIR}` points to this folder:
+`node "${CLAUDE_SKILL_DIR}/scripts/ai-labels.mjs" <command>`. Without the folder, or when sharp is
+missing, the same CLI runs with no install: `npx -y -p github:JK-G/ai-content-labels ai-labels <command>`.
 
 `decide` writes its next command as `ai-labels ...`, the name the package installs (also as
-`ai-content-labels`); here it means the `node` line above. If the plugin's MCP server is connected,
-the tools `decide_label`, `render_label`, `stamp_image` and `eu_icon` do the same. `help` lists
-every option. Stamping and PNG output need `sharp`. When `doctor`
-reports it missing, run the install command it prints (it knows whether this skill sits in a clone of
-the repository or was copied on its own), or call the CLI through
-`npx -y github:JK-G/ai-content-labels <command>`.
+`ai-content-labels`); here it means the `node` line above. If the ai-content-labels MCP server is
+connected, the tools `label_image`, `decide_label`, `render_label`, `stamp_image` and `eu_icon` do
+the same. `help` lists every option. Stamping and PNG output need `sharp`. When `doctor` reports it
+missing, run the install command it prints (it knows whether this skill sits in a clone of the
+repository or was copied on its own), or use the `npx` line above.
+
+## An image you generated or edited yourself
+
+You already know it is AI and whether it looks real, so label it in one step, right after you make it
+and before you hand it over:
+
+```
+node scripts/ai-labels.mjs label image.png --realistic --description "what it shows"
+```
+
+(MCP: `label_image` with `input` or `input_base64`, `realistic` and `description`.)
+
+- `--realistic` or `--no-realistic` is required: would the people who see it take it for a genuine
+  photo or event? Answer honestly; a person, product or place that does not exist but plausibly
+  could counts. If you cannot tell, ask the user. Without it, `label` asks the same question as
+  `decide` and exits with code 2.
+- `--modified` when you changed a real photo or a human-made image instead of making it from scratch.
+- It stamps a voluntary label too, because labelling AI images is good practice;
+  `--only-if-required` skips the stamp when the AI Act does not require the label.
+- `--lang pl` for a Polish label; `--display-width 390` for an image shown full width on a phone;
+  `--out` for the output path (default `<name>.ai-label.<ext>` next to the image).
+- Then publish the `alt` it returns, as in step 4 below. For anything else (video, audio, text, an
+  image someone else made, a human-made label) use the full workflow.
 
 ## Workflow
 
@@ -53,7 +84,7 @@ the repository or was copied on its own), or call the CLI through
    supply, such as `input` and `description`) and the same step as a CLI line (`cli`).
 3. **Make the label:**
    - Image file: `stamp photo.jpg --kind generated --media image --lang pl --description "..."`.
-     `--kind` is required: stamp never guesses the claim it burns in. Writes `photo.ai-label.jpg`
+     `--kind` is required: stamp never guesses the claim it burns in. For an image you made yourself, `label` does steps 2 and 3 at once. Writes `photo.ai-label.jpg`
      with the label in the pixels, keeps the EXIF and XMP of the original and adds an IPTC
      DigitalSourceType to the XMP for generated and modified labels. The size and colour adapt to
      the image; `--position` picks the corner (default top-left). It stamps one still file per run
