@@ -1,10 +1,10 @@
-import { writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
 import { dirname, extname, join, basename } from 'node:path';
 import { renderLabel, officialIcon, normalize, labelSentence } from './render.mjs';
 import { stampImage, loadSharp } from './stamp.mjs';
 import { decide } from './decide.mjs';
 import { UsageError } from './i18n.mjs';
-import { ASSETS_DIR, compactIcons, mediaIcons } from './assets.mjs';
+import { ASSETS_DIR, mediaIcons } from './assets.mjs';
 
 // The operations behind both the CLI and the MCP server.
 
@@ -51,14 +51,11 @@ export async function eu(name, opts = {}) {
 
 export function icons(opts = {}) {
   const media = Object.keys(mediaIcons().icons);
-  const compact = Object.keys(compactIcons());
   if (opts.out) {
-    for (const [dir, names] of [['media', media], ['compact', compact]]) {
-      mkdirSync(join(opts.out, dir), { recursive: true });
-      for (const n of names) copyFileSync(join(ASSETS_DIR, 'icons', dir, `${n}.svg`), join(opts.out, dir, `${n}.svg`));
-    }
+    mkdirSync(opts.out, { recursive: true });
+    for (const n of media) copyFileSync(join(ASSETS_DIR, 'icons', 'media', `${n}.svg`), join(opts.out, `${n}.svg`));
   }
-  return { media, compact, ...(opts.out && { out: opts.out }) };
+  return { media, ...(opts.out && { out: opts.out }) };
 }
 
 export async function doctor() {
@@ -66,8 +63,6 @@ export async function doctor() {
   const node = Number(process.versions.node.split('.')[0]);
   checks.push({ check: 'node >= 20', ok: node >= 20, detail: process.versions.node });
   checks.push({ check: 'font and EU icon assets', ok: existsSync(join(ASSETS_DIR, 'font', 'inter-semibold.json')) && existsSync(join(ASSETS_DIR, 'eu', 'basic.json')) });
-  const compact = existsSync(join(ASSETS_DIR, 'icons', 'compact')) ? readdirSync(join(ASSETS_DIR, 'icons', 'compact')).length : 0;
-  checks.push({ check: 'compact icons', ok: compact >= 5, detail: `${compact} files` });
   try {
     const sharp = await loadSharp();
     checks.push({ check: 'sharp (stamp, PNG output)', ok: true, detail: sharp.versions?.sharp ?? 'loaded' });

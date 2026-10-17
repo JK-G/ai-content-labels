@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { euBasic, mediaIcons, compactIcons, euFile } from './assets.mjs';
+import { euBasic, mediaIcons, euFile } from './assets.mjs';
 import { textPaths, measure, capHeight, missingGlyphs, round } from './text.mjs';
 import { worstCaseContrast, WCAG } from './contrast.mjs';
 import { strings, sentence, KINDS, MEDIA, UsageError } from './i18n.mjs';
@@ -12,9 +12,6 @@ export const THEMES = {
 // Colours of the official basic icon: the black file has a black disc with white letters,
 // the white file a white disc with #1d1d1b letters.
 const EU_COLORS = { black: ['#000000', '#ffffff'], white: ['#ffffff', '#1d1d1b'] };
-
-// Media types that share a compact icon.
-const COMPACT_FOR = { image: 'image-ai', text: 'text-ai', audio: 'audio-ai', voice: 'audio-ai', music: 'audio-ai', video: 'video-ai' };
 
 export const POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
@@ -33,7 +30,7 @@ export function normalize(input = {}) {
     uppercase: Boolean(input.uppercase),
     theme: input.theme ?? 'light',
     height: Number(input.height ?? 32),
-    mark: input.mark ?? 'eu',
+    minimal: Boolean(input.minimal),
     backgroundOpacity: input.backgroundOpacity == null ? undefined : Number(input.backgroundOpacity),
     allowLowContrast: Boolean(input.allowLowContrast),
   };
@@ -43,7 +40,6 @@ export function normalize(input = {}) {
   }
   if (o.kind === 'human' && o.human.length) throw new UsageError('--human adds a human-made part to an AI label; with --kind human list the types in --media');
   if (!THEMES[o.theme]) throw new UsageError(`unknown theme "${o.theme}"; use light or dark`);
-  if (!['eu', 'compact'].includes(o.mark)) throw new UsageError(`unknown mark "${o.mark}"; use eu or compact`);
   if (!(o.height >= 16 && o.height <= 512)) throw new UsageError('height must be between 16 and 512 px');
   if (o.backgroundOpacity != null && !(o.backgroundOpacity >= 0 && o.backgroundOpacity <= 1)) {
     throw new UsageError('background opacity must be between 0 and 1');
@@ -99,9 +95,10 @@ export function labelSentence(o) {
   ].join(' ');
 }
 
+// One pill: the author mark (EU "AI" disc or a hand), the text unless minimal, then the media icons.
 function pill({ kind, text, media, o, theme }) {
   const H = o.height;
-  const shown = o.uppercase ? text.toLocaleUpperCase(o.lang) : text;
+  const shown = o.minimal ? '' : o.uppercase ? text.toLocaleUpperCase(o.lang) : text;
   const missing = missingGlyphs(shown);
   if (missing.length) throw new UsageError(`the bundled font has no glyph for: ${missing.join(' ')}`);
 
@@ -111,38 +108,30 @@ function pill({ kind, text, media, o, theme }) {
   const tracking = o.uppercase ? 0.06 : 0;
   const iconSize = H * 0.5;
   const iconGap = H * 0.14;
+  const handSize = H * 0.56;
 
-  // The leading mark, and the media icons that follow the text.
-  let mark;
-  let trailing = media;
-  if (kind === 'human') {
-    mark = (x) => icon(mediaIcons().icons.human, x + inset + (markBox - H * 0.56) / 2, (H - H * 0.56) / 2, H * 0.56, theme.ink);
-  } else if (o.mark === 'compact') {
-    const name = media.length === 1 ? COMPACT_FOR[media[0]] : 'universal-ai';
-    const drawing = compactIcons()[name];
-    if (!drawing) throw new UsageError(`compact icon "${name}" is missing from assets/icons/compact`);
-    const size = H * 0.6;
-    mark = (x) => icon(drawing, x + inset + (markBox - size) / 2, (H - size) / 2, size, theme.ink);
-    if (media.length === 1) trailing = [];
-  } else {
-    mark = (x) => euDisc(x + inset, inset, markBox, theme.eu);
-  }
+  const mark =
+    kind === 'human'
+      ? (x) => icon(mediaIcons().icons.human, x + inset + (markBox - handSize) / 2, (H - handSize) / 2, handSize, theme.ink)
+      : (x) => euDisc(x + inset, inset, markBox, theme.eu);
 
-  const textX = inset + markBox + H * 0.26;
-  const textW = measure(shown, fontSize, tracking);
-  let width = textX + textW;
+  // Without text the divider sits closer to the mark; without text or icons the pill is a circle.
+  let width = inset + markBox;
+  const textX = width + H * 0.26;
+  if (shown) width = textX + measure(shown, fontSize, tracking);
   let dividerX;
   const iconXs = [];
-  if (trailing.length) {
-    dividerX = width + H * 0.28;
-    width = dividerX + H * 0.28;
-    for (const _ of trailing) {
+  if (media.length) {
+    const gap = shown ? H * 0.28 : H * 0.24;
+    dividerX = width + gap;
+    width = dividerX + gap;
+    for (const _ of media) {
       iconXs.push(width);
       width += iconSize + iconGap;
     }
     width += H * 0.3 - iconGap;
   } else {
-    width += H * 0.4;
+    width = shown ? width + H * 0.4 : H;
   }
 
   const bw = Math.max(1, H / 32);
@@ -151,14 +140,14 @@ function pill({ kind, text, media, o, theme }) {
       `<rect x="${round(x0 + bw / 2)}" y="${round(bw / 2)}" width="${round(width - bw)}" height="${round(H - bw)}" rx="${round((H - bw) / 2)}" ` +
         `fill="${theme.background}" fill-opacity="${theme.backgroundOpacity}" stroke="${theme.border}" stroke-opacity="${theme.borderOpacity}" stroke-width="${round(bw)}"/>`,
       mark(x0),
-      textPaths(shown, { x: x0 + textX, baseline: H / 2 + capHeight(fontSize) / 2, size: fontSize, fill: theme.ink, tracking }),
     ];
+    if (shown) parts.push(textPaths(shown, { x: x0 + textX, baseline: H / 2 + capHeight(fontSize) / 2, size: fontSize, fill: theme.ink, tracking }));
     if (dividerX != null) {
       parts.push(
         `<line x1="${round(x0 + dividerX)}" y1="${round(H * 0.28)}" x2="${round(x0 + dividerX)}" y2="${round(H * 0.72)}" ` +
           `stroke="${theme.ink}" stroke-opacity="0.35" stroke-width="${round(bw)}" stroke-linecap="round"/>`
       );
-      trailing.forEach((m, i) => parts.push(icon(mediaIcons().icons[m], x0 + iconXs[i], (H - iconSize) / 2, iconSize, theme.ink)));
+      media.forEach((m, i) => parts.push(icon(mediaIcons().icons[m], x0 + iconXs[i], (H - iconSize) / 2, iconSize, theme.ink)));
     }
     return parts.join('');
   };

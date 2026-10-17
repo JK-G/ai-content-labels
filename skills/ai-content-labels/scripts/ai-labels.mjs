@@ -12,7 +12,7 @@ Commands
   alt                    Print the alt-text sentence for a label
   eu [basic|generated|modified]
                          The official EU icon, unchanged (--variant, --out)
-  icons [--out dir]      List the media and compact icons, or copy them to a folder
+  icons [--out dir]      List the content-type icons, or copy them to a folder
   doctor                 Check the setup
 
 Label options (render, stamp, alt)
@@ -25,7 +25,8 @@ Label options (render, stamp, alt)
   --human-text "..."     your own text for the human-made part
   --short                compact wording ("Generated" instead of "Generated with AI")
   --uppercase            upper case with letter spacing, like the EU icons
-  --mark eu|compact      leading mark: the EU icon (default) or the compact icon set
+  --minimal              no text: only the author mark (EU "AI" disc or a hand) and
+                         the content-type icons
   --theme light|dark     stamp also accepts auto (default there)
   --height <px>          default 32; stamp picks about 4.5% of the shorter image side
   --background-opacity <0-1>
@@ -49,8 +50,8 @@ Other
   --json                 machine-readable output
 `;
 
-const BOOLEAN = new Set(['short', 'uppercase', 'json', 'allow-low-contrast', 'realistic', 'creative', 'public-interest', 'editorial-review', 'metadata', 'help']);
-const LABEL = ['kind', 'media', 'human', 'lang', 'text', 'human-text', 'short', 'uppercase', 'mark', 'theme', 'height', 'background-opacity', 'allow-low-contrast'];
+const BOOLEAN = new Set(['short', 'uppercase', 'minimal', 'json', 'allow-low-contrast', 'realistic', 'creative', 'public-interest', 'editorial-review', 'metadata', 'help']);
+const LABEL = ['kind', 'media', 'human', 'lang', 'text', 'human-text', 'short', 'uppercase', 'minimal', 'theme', 'height', 'background-opacity', 'allow-low-contrast'];
 // The options each command accepts; anything else is a typo and must not pass silently.
 const OPTIONS = {
   render: [...LABEL, 'out', 'scale'],
@@ -154,7 +155,7 @@ async function main(argv) {
       return 0;
     }
     case 'icons': {
-      print(icons(flags), (r) => `media: ${r.media.join(', ')}\ncompact: ${r.compact.join(', ') || '(none)'}\n${r.out ? `copied to ${r.out}\n` : ''}`);
+      print(icons(flags), (r) => `${r.media.join(', ')}\n${r.out ? `copied to ${r.out}\n` : ''}`);
       return 0;
     }
     case 'doctor': {

@@ -4,7 +4,7 @@
 
 Labels for AI-generated and human-made content, built on the official EU icons. ai-content-labels tells you whether the EU AI Act requires a label, draws one that keeps WCAG contrast on any background, burns it into images and hands you the alt text. It ships as a CLI, an MCP server and a skill for Claude Code and other agents.
 
-![Labels in a light and a dark theme: "Generated with AI" with an image icon, "Modified with AI" with image and voice icons, a custom "Voice generated with AI", an AI label next to a "Human-made" label, a Polish label, an upper-case label and one with the compact icon](docs/labels.png)
+![Labels in a light and a dark theme: "Generated with AI" with an image icon, "Modified with AI" with image and voice icons, a custom "Voice generated with AI", an AI label next to a "Human-made" label, a Polish label and an upper-case label](docs/labels.png)
 
 Unofficial. Not affiliated with the European Commission, and not legal advice.
 
@@ -97,6 +97,15 @@ $ ai-labels render --kind modified --media image,voice --human text --lang pl --
 
 `--media` adds the content-type icons. `--human text` puts a "Made by a human" label next to an AI label. `--short` switches to the compact wording that mirrors the EU icons ("Generated"), and `--uppercase` sets it in spaced capitals like the icons themselves.
 
+### Minimal form
+
+![Minimal labels: the AI disc with an image icon, with image and voice icons, an AI label next to a hand with a text icon, and a hand with text and image icons](docs/minimal.png)
+
+`--minimal` drops the text. The left side says who made it (the EU "AI" disc or a hand), the right side says what (the content-type icons). It fits where a full label does not: thumbnails, avatars, dense feeds, UI chips. Two things to know before you use it:
+
+- In user testing for the EU icons, labels with text were noticed and understood better. When the label is a legal duty, prefer the full form, or keep the minimal one and say the same thing in words in the caption.
+- Without text, "generated" and "modified" look the same. Only the alt text tells them apart.
+
 ## Accessibility
 
 Article 50(5) asks for disclosures that conform to the applicable accessibility requirements, and the EU icon guidance asks for alt text or ARIA labels. The labels follow WCAG 2.2:
@@ -109,12 +118,6 @@ Article 50(5) asks for disclosures that conform to the applicable accessibility 
 ## What the AI Act asks
 
 The short version is in the [Why](#why) section. The rules behind `decide`, with quotes and links to the Act, the EU icon page and the Code of Practice, are in [`references/rules.md`](skills/ai-content-labels/references/rules.md). `decide` is a checklist, not legal advice, and the Commission's guidelines on Article 50 may change the details.
-
-## Compact icons
-
-![Compact icons: image-ai, text-ai, audio-ai, video-ai and universal-ai, in a light and a dark theme](docs/compact-icons.png)
-
-A second, unofficial set for tight UI spots where a full label does not fit: a content-type symbol with "AI" built into it, drawn on the Lucide grid (24 px, 2 px stroke). Use `--mark compact` to lead a label with one, or `ai-labels icons --out icons/` to copy the SVGs. They read well from 20 px up. At 16 px the image and audio icons get tight. When the law requires a disclosure, prefer the EU icon.
 
 ## Limits
 
@@ -134,4 +137,4 @@ A second, unofficial set for tight UI spots where a full label does not fit: a c
 - **Content-type icons:** [Lucide](https://lucide.dev), ISC licence.
 - **Font:** [Inter](https://rsms.me/inter/) by Rasmus Andersson, SIL Open Font License 1.1.
 
-The code and the compact icons are MIT. Details for the third-party files are in [NOTICE.md](NOTICE.md).
+The code is MIT. Details for the third-party files are in [NOTICE.md](NOTICE.md).

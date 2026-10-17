@@ -12,7 +12,7 @@ Terms, as stated on that page: the icons "are made publicly available for everyo
 
 ## Lucide
 
-Files: `skills/ai-content-labels/assets/icons/media/*.svg` and `assets/icons/media.json` (from Lucide 1.59.0). The compact icons in `assets/icons/compact/` are original drawings that partly derive from Lucide geometry.
+Files: `skills/ai-content-labels/assets/icons/media/*.svg` and `assets/icons/media.json` (from Lucide 1.59.0).
 
 ```
 ISC License

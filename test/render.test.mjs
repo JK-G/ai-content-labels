@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import { renderLabel, officialIcon, THEMES } from '../skills/ai-content-labels/scripts/lib/render.mjs';
 import { worstCaseContrast, contrastRatio, WCAG } from '../skills/ai-content-labels/scripts/lib/contrast.mjs';
 import { KINDS, MEDIA, LANGS } from '../skills/ai-content-labels/scripts/lib/i18n.mjs';
-import { compactIcons } from '../skills/ai-content-labels/scripts/lib/assets.mjs';
 import { VERSION } from '../skills/ai-content-labels/scripts/lib/version.mjs';
 
 test('every kind renders in every language and theme', () => {
@@ -82,12 +81,22 @@ test('official EU icons are shipped unchanged in all variants', () => {
   }
 });
 
-test('compact mark: one icon per media type, universal for several', () => {
-  const icons = compactIcons();
-  for (const n of ['image-ai', 'text-ai', 'audio-ai', 'video-ai', 'universal-ai']) assert.ok(icons[n], n);
-  assert.ok(renderLabel({ mark: 'compact', media: 'image' }).svg.includes(icons['image-ai']));
-  assert.ok(renderLabel({ mark: 'compact', media: 'image,voice' }).svg.includes(icons['universal-ai']));
-  for (const m of MEDIA) assert.doesNotThrow(() => renderLabel({ mark: 'compact', media: m }));
+test('minimal: mark and icons only, same alt text', () => {
+  const full = renderLabel({ media: 'image,voice', lang: 'pl' });
+  const minimal = renderLabel({ media: 'image,voice', lang: 'pl', minimal: true });
+  assert.ok(minimal.width < full.width / 2);
+  assert.equal(minimal.alt, full.alt);
+  // No glyph group: the only scaled groups are the EU disc and the two icons.
+  assert.equal((minimal.svg.match(/scale\(/g) ?? []).length, 3);
+  for (const kind of KINDS) for (const m of MEDIA) assert.doesNotThrow(() => renderLabel({ kind, media: m, minimal: true }));
+});
+
+test('minimal without media is a round badge, and ignores text the font cannot draw', () => {
+  for (const kind of ['generated', 'human']) {
+    const { width, height } = renderLabel({ kind, minimal: true, height: 40 });
+    assert.equal(width, height);
+  }
+  assert.doesNotThrow(() => renderLabel({ kind: 'basic', text: '人工智能', minimal: true }));
 });
 
 test('version matches package.json', () => {

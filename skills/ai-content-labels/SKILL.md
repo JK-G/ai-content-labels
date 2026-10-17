@@ -64,9 +64,12 @@ the repository or was copied on its own), or call the CLI through
 - `--media` lists only the parts that are AI (or, with `--kind human`, the parts made by a person).
 - Match the language of the content: `--lang pl` for Polish. Only `en` and `pl` are built in; for
   another language pass `--text` in that language (plain words, no abbreviation other than "AI").
-- `--mark eu` (the default) leads with the official EU icon; use it for anything published.
-  `--mark compact` uses this project's compact icons for tight UI spots. They are not official.
 - `--short` gives the compact wording ("Generated"), useful for two labels side by side.
+- `--minimal` drops the text: the author mark (EU "AI" disc or a hand) plus the content-type icons.
+  Use it only when the user asks for it or the spot is too small for text (thumbnails, avatars, UI
+  chips). When `decide` says the label is required, keep the full form, or use the minimal one and
+  put the label sentence in a visible caption. Without text, "generated" and "modified" look the
+  same, so the alt text must carry the difference.
 - The untouched EU files: `eu generated --variant black --out ai-generated.svg` (also `basic`,
   `modified`; variants `black`, `white`, `black-transparent`, `white-transparent`).
 

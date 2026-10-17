@@ -17,7 +17,7 @@ const labelProps = {
   human_text: { type: 'string', description: 'Own text for the human-made part' },
   short: { type: 'boolean', description: 'Compact wording, e.g. "Generated"' },
   uppercase: { type: 'boolean', description: 'Upper case with letter spacing, like the EU icons' },
-  mark: { type: 'string', enum: ['eu', 'compact'], description: 'Leading mark: the official EU icon (default) or the compact icon set' },
+  minimal: { type: 'boolean', description: 'No text: only the author mark (EU "AI" disc or a hand) and the content-type icons. For tight spots, or where a caption already says it in words' },
   height: { type: 'number', description: 'Label height in px' },
 };
 

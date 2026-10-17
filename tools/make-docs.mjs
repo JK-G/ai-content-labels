@@ -5,8 +5,6 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { renderLabel } from '../skills/ai-content-labels/scripts/lib/render.mjs';
-import { textPaths, measure } from '../skills/ai-content-labels/scripts/lib/text.mjs';
-import { compactIcons } from '../skills/ai-content-labels/scripts/lib/assets.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sharp = createRequire(import.meta.url)('sharp');
@@ -46,31 +44,17 @@ await sheet(
     { kind: 'human', media: 'text,image', height: 36 },
     { kind: 'generated', media: 'image,video', lang: 'pl', height: 36 },
     { kind: 'generated', media: 'image', short: true, uppercase: true, height: 36 },
-    { kind: 'generated', media: 'image', mark: 'compact', height: 36 },
   ],
   { panelWidth: 480, rowHeight: 52 }
 );
 
-// Compact icons at 24 and 48 px, with their names.
-{
-  const names = ['image-ai', 'text-ai', 'audio-ai', 'video-ai', 'universal-ai'];
-  const icons = compactIcons();
-  const cell = 120;
-  const height = 150;
-  const parts = [];
-  PANELS.forEach((panel, p) => {
-    const ink = panel.theme === 'light' ? '#1d1d1b' : '#ffffff';
-    const x0 = p * cell * names.length;
-    parts.push(`<rect x="${x0}" width="${cell * names.length}" height="${height}" fill="${panel.background}"/>`);
-    names.forEach((n, i) => {
-      const cx = x0 + i * cell + cell / 2;
-      const draw = (size, y) =>
-        `<g transform="translate(${cx - size / 2} ${y}) scale(${size / 24})" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[n]}</g>`;
-      parts.push(draw(48, 18), draw(24, 80));
-      parts.push(textPaths(n, { x: cx - measure(n, 12) / 2, baseline: 132, size: 12, fill: ink }));
-    });
-  });
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cell * names.length * 2}" height="${height}">${parts.join('')}</svg>`;
-  await sharp(Buffer.from(svg), { density: 72 * SCALE }).png().toFile(join(docs, 'compact-icons.png'));
-  console.log('docs/compact-icons.png');
-}
+await sheet(
+  'minimal.png',
+  [
+    { media: 'image', minimal: true, height: 36 },
+    { media: 'image,voice', minimal: true, height: 36 },
+    { media: 'image', human: 'text', minimal: true, height: 36 },
+    { kind: 'human', media: 'text,image', minimal: true, height: 36 },
+  ],
+  { panelWidth: 240, rowHeight: 52 }
+);
