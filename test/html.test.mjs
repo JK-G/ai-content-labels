@@ -43,20 +43,59 @@ test('language, theme pinning and minimal form', () => {
   assert.match(minimal, /<span class="ai-label-sr">Made by a human: text\.<\/span>/);
 });
 
-test('the stylesheet keeps WCAG text contrast in both themes and follows dark mode', () => {
-  const light = { bg: LABEL_CSS.match(/--ai-label-bg:(#[0-9a-f]+)/)[1], ink: LABEL_CSS.match(/--ai-label-ink:(#[0-9a-f]+)/)[1] };
-  const dark = LABEL_CSS.match(/\[data-theme=dark\]\{--ai-label-bg:(#[0-9a-f]+);--ai-label-ink:(#[0-9a-f]+)/);
-  assert.ok(contrastRatio(parseHex(light.ink), parseHex(light.bg)) >= 4.5);
-  assert.ok(contrastRatio(parseHex(dark[2]), parseHex(dark[1])) >= 4.5);
-  assert.match(LABEL_CSS, /prefers-color-scheme:dark/);
+test('the stylesheet keeps WCAG text contrast in both themes and follows the page colour scheme', () => {
+  const [, lightBg, darkBg] = LABEL_CSS.match(/--ai-label-bg:light-dark\((#[0-9a-f]+),(#[0-9a-f]+)\)/);
+  const [, lightInk, darkInk] = LABEL_CSS.match(/--ai-label-ink:light-dark\((#[0-9a-f]+),(#[0-9a-f]+)\)/);
+  assert.ok(contrastRatio(parseHex(lightInk), parseHex(lightBg)) >= 4.5);
+  assert.ok(contrastRatio(parseHex(darkInk), parseHex(darkBg)) >= 4.5);
+  // The page's color-scheme decides, not the OS: a light-only page keeps a light pill in dark mode.
+  assert.match(LABEL_CSS, /\.ai-label\{color-scheme:inherit;/);
+  assert.match(LABEL_CSS, /\.ai-label\[data-theme=dark\]\{color-scheme:dark\}/);
+  assert.match(LABEL_CSS, /\.ai-label\[data-theme=light\]\{color-scheme:light\}/);
+  // Browsers without light-dark() fall back to literal colours and the OS setting.
+  const fallback = LABEL_CSS.match(/@supports not \(color:light-dark\(#000,#fff\)\)\{(.*)\}\n/)[1];
+  assert.match(fallback, /--ai-label-bg:#fff;--ai-label-ink:#1d1d1b/);
+  assert.match(fallback, /prefers-color-scheme:dark/);
   assert.match(LABEL_CSS, /forced-colors:active/);
 });
 
-test('a pill keeps its icons on its line and narrows its text instead of overflowing', () => {
-  // A wrapping pill pushed its icons to a second line even with room to spare (checked in Chrome).
+test('narrow columns wrap whole words and move the icons under them', () => {
   const pill = LABEL_CSS.match(/\.ai-label-pill\{[^}]*\}/)[0];
   assert.doesNotMatch(pill, /flex-wrap/);
   assert.match(pill, /min-width:0/);
   assert.match(pill, /max-width:100%/);
-  assert.match(LABEL_CSS, /\.ai-label-text\{min-width:0;overflow-wrap:anywhere\}/);
+  assert.match(LABEL_CSS, /\.ai-label-body\{display:inline-flex;flex-wrap:wrap;[^}]*min-width:0\}/);
+  // min-width:0: a word longer than the column breaks inside the pill instead of overflowing it.
+  assert.match(LABEL_CSS, /\.ai-label-text\{min-width:0;overflow-wrap:break-word;hyphens:auto\}/);
+  assert.doesNotMatch(LABEL_CSS, /overflow-wrap:anywhere/);
+  // Type floors: 12 px for the label, 10 px for spaced capitals.
+  assert.match(LABEL_CSS, /font:600 max\(\.875em,12px\)/);
+  assert.match(LABEL_CSS, /\.ai-label-upper \.ai-label-text\{[^}]*font-size:max\(\.85em,10px\)/);
+  const { html } = renderHtml({ kind: 'modified', media: 'image,voice', lang: 'pl' });
+  assert.match(html, /<\/svg><span class="ai-label-body"><span class="ai-label-text">Zmodyfikowane przez AI<\/span><span class="ai-label-media">/);
+  // A bare minimal badge has no body, so no gap after the mark.
+  assert.doesNotMatch(renderHtml({ minimal: true }).html, /ai-label-body/);
+});
+
+test('the hand in the HTML mark is drawn at three-quarter scale with a 2 px stroke', () => {
+  const { html } = renderHtml({ kind: 'human', media: 'text' });
+  assert.match(html, /<g class="ai-label-hand" transform="translate\(2\.52 3\.48\) scale\(0\.75\)">/);
+  assert.match(LABEL_CSS, /\.ai-label-hand\{[^}]*stroke-width:2\.667/);
+});
+
+test('alt is null without a description; with one it is the description, then the sentence', () => {
+  const plain = renderHtml({ media: 'image' });
+  assert.equal(plain.alt, null);
+  assert.match(plain.altMissing, /pass description/);
+  const wolf = renderHtml({ media: 'image', description: 'Wilk', lang: 'pl' });
+  assert.equal(wolf.alt, 'Wilk. Wygenerowane przez AI: obraz.');
+  assert.equal(wolf.altMissing, undefined);
+});
+
+test('own text in another EU language is tagged with that language and read alone', () => {
+  const { html, disclosure } = renderHtml({ lang: 'fr', text: 'Généré par IA', media: 'image' });
+  assert.match(html, /^<span class="ai-label" role="note" lang="fr">/);
+  assert.equal(disclosure, 'Généré par IA.');
+  assert.equal(spoken(html), 'Généré par IA.');
+  assert.throws(() => renderHtml({ lang: 'fr', media: 'image' }), /no built-in wording for "fr"/);
 });

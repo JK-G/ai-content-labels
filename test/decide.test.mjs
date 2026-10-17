@@ -9,7 +9,9 @@ test('a realistic AI image is a deep fake: label required, generated icon, burne
   assert.equal(d.officialIcon, 'generated');
   assert.deepEqual(d.label, { kind: 'generated', media: ['image'], lang: 'en' });
   assert.ok(d.placement.some((p) => /stamp/.test(p)));
-  assert.equal(d.altText, 'Generated with AI: image.');
+  assert.equal(d.disclosure, 'Generated with AI: image.');
+  assert.equal(d.altText, undefined);
+  assert.equal(d.verdict, 'REQUIRED: realistic AI image, a deep fake under Article 50(4)');
 });
 
 test('a stylised AI illustration needs no label, but gets the same advice', () => {
@@ -27,9 +29,21 @@ test('a creative deep fake: required, label need not be embedded but must be see
 });
 
 test('public-interest text: required without editorial review, not with it', () => {
-  assert.equal(decide({ media: 'text', origin: 'generated', publicInterest: true }).required, true);
+  assert.equal(decide({ media: 'text', origin: 'generated', publicInterest: true, editorialReview: false }).required, true);
   assert.equal(decide({ media: 'text', origin: 'generated', publicInterest: true, editorialReview: true }).required, false);
   assert.equal(decide({ media: 'text', origin: 'generated', publicInterest: false }).required, false);
+});
+
+test('public-interest text without an answer on editorial review: ask, do not guess', () => {
+  for (const origin of ['generated', 'modified']) {
+    const d = decide({ media: 'text', origin, publicInterest: true });
+    assert.equal(d.required, 'unknown');
+    assert.equal(d.missing, 'editorial_review');
+    assert.match(d.question, /fact-checked/);
+    assert.doesNotMatch(d.question, /--/);
+  }
+  assert.equal(decide({ media: 'text', origin: 'generated', publicInterest: true, editorialReview: 'true' }).required, false);
+  assert.equal(decide({ media: 'text', origin: 'generated', publicInterest: true, editorialReview: 'false' }).required, true);
 });
 
 test('audio needs an audible disclaimer', () => {
@@ -43,7 +57,58 @@ test('human-made content: no duty, human label with a warning', () => {
   assert.equal(d.required, false);
   assert.equal(d.label.kind, 'human');
   assert.equal(d.officialIcon, null);
-  assert.equal(d.altText, 'Stworzone przez człowieka: tekst.');
+  assert.equal(d.disclosure, 'Stworzone przez człowieka: tekst.');
+  assert.equal(d.verdict, 'NOT REQUIRED: human-made content');
+});
+
+test('the alt text example is built from the label sentence, so a human verdict shows no AI sentence', () => {
+  const h = decide({ media: 'image', origin: 'human' }).accessibility[0];
+  assert.match(h, /Made by a human: image\./);
+  assert.doesNotMatch(h, /Generated with AI/);
+  assert.match(decide({ media: 'image', origin: 'generated', realistic: true, lang: 'pl' }).accessibility[0], /Nowoczesny dom wśród sosen, wizualizacja architektoniczna\. Wygenerowane przez AI: obraz\./);
+});
+
+test('languages: any EU code; without built-in wording the sentence is left to the user', () => {
+  const de = decide({ media: 'image', origin: 'generated', realistic: true, lang: 'de' });
+  assert.equal(de.required, true);
+  assert.equal(de.disclosure, null);
+  assert.deepEqual(de.label, { kind: 'generated', media: ['image'], lang: 'de' });
+  assert.ok(de.notes.some((n) => /no built-in wording for "de"/.test(n)));
+  assert.equal(decide({ media: 'image', origin: 'generated', lang: 'fr' }).disclosure, null);
+  assert.throws(() => decide({ media: 'image', origin: 'generated', realistic: true, lang: 'xx' }), /24 EU codes/);
+});
+
+test('video, audio and animation advice follows the Code and WCAG', () => {
+  const video = decide({ media: 'video', origin: 'generated', realistic: true });
+  assert.match(video.placement[0], /Sub-measure 1\.2\.2\(b\)/);
+  assert.match(video.accessibility[0], /WCAG 1\.2\.5/);
+  assert.match(video.accessibility[0], /captions alone do not reach blind viewers/);
+  assert.match(video.accessibility.join(' '), /WCAG 2\.2\.2/);
+  const audio = decide({ media: 'audio', origin: 'modified', realistic: true, lang: 'pl' });
+  assert.match(audio.placement[0], /To nagranie zawiera głos wygenerowany przez AI/);
+  assert.match(audio.placement[0], /Sub-measure 1\.2\.3/);
+  assert.match(audio.accessibility[0], /WCAG 1\.2\.1/);
+  const human = decide({ media: 'image', origin: 'human' }).notes.join(' ');
+  assert.match(human, /Measure 2\.1/);
+  assert.match(human, /2005\/29\/EC/);
+});
+
+test('every verdict has a short verdict line', () => {
+  const cases = [
+    { media: 'image', origin: 'generated', realistic: true },
+    { media: 'video', origin: 'modified', realistic: true, creative: true },
+    { media: 'image', origin: 'generated', realistic: false },
+    { media: 'text', origin: 'generated', publicInterest: true, editorialReview: true },
+    { media: 'text', origin: 'generated', publicInterest: true, editorialReview: false },
+    { media: 'text', origin: 'generated', publicInterest: false },
+    { media: 'image', origin: 'assisted' },
+    { media: 'audio', origin: 'human' },
+  ];
+  for (const c of cases) {
+    const d = decide(c);
+    assert.match(d.verdict, d.required ? /^REQUIRED/ : /^NOT REQUIRED/);
+    assert.ok(d.verdict.length < 90, d.verdict);
+  }
 });
 
 test('standard edits only: no duty, basic label optional', () => {
@@ -66,7 +131,10 @@ test('no verdict without the deciding fact: image, video and audio need realisti
   for (const media of ['image', 'video', 'audio']) {
     const d = decide({ media, origin: 'generated' });
     assert.equal(d.required, 'unknown');
-    assert.match(d.question, /--realistic or --no-realistic/);
+    assert.equal(d.missing, 'realistic');
+    assert.match(d.question, /genuine photo/);
+    assert.doesNotMatch(d.question, /--/);
+    assert.equal(d.disclosure, `Generated with AI: ${media}.`);
     assert.equal(d.basis, undefined);
     assert.equal(d.placement, undefined);
     assert.deepEqual(d.label, { kind: 'generated', media: [media], lang: 'en' });
@@ -77,7 +145,8 @@ test('no verdict without the deciding fact: image, video and audio need realisti
 test('no verdict without the deciding fact: text needs public interest', () => {
   const d = decide({ media: 'text', origin: 'modified' });
   assert.equal(d.required, 'unknown');
-  assert.match(d.question, /--public-interest or --no-public-interest/);
+  assert.equal(d.missing, 'public_interest');
+  assert.match(d.question, /matter of public interest/);
 });
 
 test('media and origin are both required', () => {
@@ -106,7 +175,7 @@ test('editorial review exception asks for named responsibility; human mark is no
 });
 
 test('accessibility advice fits the media', () => {
-  const text = decide({ media: 'text', origin: 'generated', publicInterest: true }).accessibility.join(' ');
+  const text = decide({ media: 'text', origin: 'generated', publicInterest: true, editorialReview: false }).accessibility.join(' ');
   assert.doesNotMatch(text, /burned into an image/);
   assert.doesNotMatch(text, /during a video/);
   const image = decide({ media: 'image', origin: 'generated', realistic: true }).accessibility.join(' ');

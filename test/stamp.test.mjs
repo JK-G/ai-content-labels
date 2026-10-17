@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync, existsSync, copyFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { createRequire } from 'node:module';
-import { mergeXmp, digitalSourceXmp, autoHeight, LABEL_NS } from '../skills/ai-content-labels/scripts/lib/stamp.mjs';
+import { mergeXmp, digitalSourceXmp, autoHeight, labelledAs, LABEL_NS } from '../skills/ai-content-labels/scripts/lib/stamp.mjs';
 import { renderLabel } from '../skills/ai-content-labels/scripts/lib/render.mjs';
 import { stamp } from '../skills/ai-content-labels/scripts/lib/api.mjs';
 
@@ -59,6 +59,18 @@ test('mergeXmp marks the file as visibly labelled, once', () => {
   assert.equal(twice.split(LABEL_NS).length, 2);
 });
 
+test('the marker is written for every kind; the DigitalSourceType only when asked', () => {
+  const human = mergeXmp(packet(''), 'human', { sourceType: null });
+  assert.match(human, /<aicl:VisibleLabel>human<\/aicl:VisibleLabel>/);
+  assert.doesNotMatch(human, /DigitalSourceType/);
+  assert.doesNotMatch(digitalSourceXmp('basic'), /DigitalSourceType/);
+  assert.doesNotMatch(mergeXmp(undefined, 'generated', { sourceType: null }), /DigitalSourceType/);
+  assert.equal(labelledAs(human), 'human');
+  assert.equal(labelledAs(packet('')), null);
+  // A forced restamp records the new kind.
+  assert.match(mergeXmp(human, 'generated'), /<aicl:VisibleLabel>generated<\/aicl:VisibleLabel>/);
+});
+
 test('the theme is the one that stands out more from the image', { skip: !sharp && 'sharp not installed' }, async () => {
   const mid = await stamp(await flat('g155.png', 155), { media: 'image' });
   assert.equal(mid.label.theme, 'dark');
@@ -77,7 +89,7 @@ test('stamp refuses to overwrite, to stamp twice or onto itself; force overrides
   await assert.rejects(stamp(input, { media: 'image', out: input }), /--out must differ/);
   const copy = join(tmp, 'copy.png');
   await sharp(first.output).keepMetadata().png().toFile(copy);
-  await assert.rejects(stamp(copy, { media: 'image' }), /already labelled \(an ai-content-labels marker/);
+  await assert.rejects(stamp(copy, { media: 'image' }), /already labelled as generated \(an ai-content-labels marker/);
   // A contradictory label is reported first, even when the output already exists.
   await assert.rejects(stamp(input, { media: 'image,text', human: 'text' }), /text is in both --media and --human/);
 });
@@ -89,6 +101,57 @@ test('an AI image with a DigitalSourceType from its generator can still be stamp
   );
   await sharp({ create: { width: 800, height: 600, channels: 3, background: '#888' } }).withXmp(fromGenerator).png().toFile(input);
   await assert.doesNotReject(stamp(input, { media: 'image' }));
+});
+
+test('a human-made or untagged stamp still cannot be stamped over after a rename', { skip: !sharp && 'sharp not installed' }, async () => {
+  const input = await flat('rename.png', 120, 800, 600);
+  const human = await stamp(input, { kind: 'human', media: 'image', out: join(tmp, 'h.png') });
+  assert.match(human.metadata, /marker only: IPTC has no DigitalSourceType term/);
+  const xmp = (await sharp(human.output).metadata()).xmp.toString();
+  assert.match(xmp, /aicl:VisibleLabel>human/);
+  assert.doesNotMatch(xmp, /DigitalSourceType/);
+  copyFileSync(human.output, join(tmp, 'h2.png'));
+  await assert.rejects(stamp(join(tmp, 'h2.png'), { media: 'image', out: join(tmp, 'h3.png') }), /already labelled as human/);
+  const bare = await stamp(input, { media: 'image', metadata: false, out: join(tmp, 'n.png') });
+  assert.match(bare.metadata, /--no-metadata/);
+  assert.doesNotMatch((await sharp(bare.output).metadata()).xmp.toString(), /DigitalSourceType/);
+  copyFileSync(bare.output, join(tmp, 'n2.png'));
+  await assert.rejects(stamp(join(tmp, 'n2.png'), { media: 'image', out: join(tmp, 'n3.png') }), /already labelled as generated/);
+});
+
+test('two parallel stamps to one output: one wins, no partial file is left', { skip: !sharp && 'sharp not installed' }, async () => {
+  const dir = mkdtempSync(join(tmp, 'race-'));
+  const input = join(dir, 'in.png');
+  await sharp({ create: { width: 800, height: 600, channels: 3, background: '#777' } }).png().toFile(input);
+  const out = join(dir, 'out.png');
+  const results = await Promise.allSettled([stamp(input, { media: 'image', out }), stamp(input, { media: 'image', out })]);
+  assert.equal(results.filter((r) => r.status === 'rejected').length, 1);
+  assert.match(results.find((r) => r.status === 'rejected').reason.message, /being written by another call/);
+  await assert.rejects(stamp(input, { media: 'image', out: join(dir, 'bad.gif') }), /GIF output is not supported/);
+  assert.deepEqual(readdirSync(dir).filter((f) => f.endsWith('.part')), []);
+  assert.deepEqual(readdirSync(dir).sort(), ['in.png', 'out.png']);
+});
+
+test('folders and animated images are refused with what to do instead', { skip: !sharp && 'sharp not installed' }, async () => {
+  await assert.rejects(stamp(tmp, { media: 'image' }), /input is a folder; stamp takes one file/);
+  const frame = (c) => sharp({ create: { width: 200, height: 200, channels: 3, background: c } }).png().toBuffer();
+  const anim = join(tmp, 'anim.webp');
+  await sharp([await frame('#f00'), await frame('#00f')], { join: { animated: true } }).webp().toFile(anim);
+  await assert.rejects(stamp(anim, { media: 'image', minimal: true }), /animated images are not supported yet \(2 frames\)/);
+});
+
+test('alt is null without a description, and the result says what to pass', { skip: !sharp && 'sharp not installed' }, async () => {
+  const input = await flat('alt.png', 90, 800, 600);
+  const r = await stamp(input, { media: 'image', out: join(tmp, 'alt-out.png') });
+  assert.equal(r.alt, null);
+  assert.match(r.altMissing, /pass description/);
+  assert.notEqual(r.alt, r.disclosure);
+  assert.equal(r.wcag, true);
+  const d = await stamp(input, { media: 'image', description: 'A wolf.', out: join(tmp, 'alt-out2.png') });
+  assert.equal(d.alt, 'A wolf. Generated with AI: image.');
+  assert.equal(d.altMissing, undefined);
+  const low = await stamp(input, { media: 'image', backgroundOpacity: 0.3, allowLowContrast: true, out: join(tmp, 'alt-out3.png') });
+  assert.equal(low.wcag, false);
 });
 
 test('a label with text needs 24 px; minimal stamps go down to 20', { skip: !sharp && 'sharp not installed' }, async () => {

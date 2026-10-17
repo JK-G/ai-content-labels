@@ -34,36 +34,57 @@ the repository or was copied on its own), or call the CLI through
      and a named person or company holds editorial responsibility).
 
    Ask only for what you cannot infer, in one short question. If `decide` answers `UNKNOWN`
-   (`required: "unknown"` over MCP), ask the user that one question; never guess it. If the user is
-   clearly acting privately, say the duty does not apply to them and offer the label as voluntary.
+   (`required: "unknown"` over MCP), ask the one question it names in `missing` (`realistic`,
+   `public_interest` or `editorial_review`); never guess it. For public-interest text it always
+   asks about editorial review, because that decides the case.
+
+   The duty binds deployers in the EU, and deployers elsewhere when they foresee the content being
+   used in the EU, for example by publishing it on the open internet. A person acting in a purely
+   personal, non-professional way has no duty; work for pay or regular economic benefit, as a
+   freelancer or for an employer, is professional. If the user is clearly acting privately, say the
+   duty does not apply to them and offer the label as voluntary.
 2. **Decide:** `decide --media image --origin generated --realistic --lang pl`. It says whether the
-   label is a legal duty or a voluntary one, which label to use (and the official EU icon with the
-   same meaning), where to put it, and the label sentence. Pass its label (kind, media, lang)
-   unchanged to the next step.
+   label is a legal duty or a voluntary one, the next command to run, which label to use (and the
+   official EU icon with the same meaning), where to put it, and the label sentence (`disclosure`).
+   `--explain` adds the basis, notes and sources; `--json` always has everything. Pass its label
+   (kind, media, lang) unchanged to the next step.
 3. **Make the label:**
    - Image file: `stamp photo.jpg --kind generated --media image --lang pl --description "..."`.
      Writes `photo.ai-label.jpg` with the label in the pixels, keeps the EXIF and XMP of the
-     original and adds an IPTC DigitalSourceType to the XMP. The size and colour adapt to the image;
-     `--position` picks the corner (default top-left). It stamps one file per run and refuses to
-     overwrite or to stamp a labelled file again unless you pass `--force`.
-   - Web page or app: use `render --format html` (real text: zooms, reflows, translates, follows
-     dark mode) and put the CSS from `render --format html --css` on the page once. Use SVG or PNG
-     (`render ... --out label.svg`) for images, video overlays and places that only accept an
+     original and adds an IPTC DigitalSourceType to the XMP for generated and modified labels. The
+     size and colour adapt to the image; `--position` picks the corner (default top-left). It
+     stamps one still file per run and refuses to overwrite or to stamp a labelled file again
+     unless you pass `--force`. For social posts, crop to the platform's final aspect first
+     (Instagram 4:5 or 1:1), then stamp, so the label sits inside every crop.
+   - A folder of images: run `decide` once per distinct kind of content, then stamp each file with
+     its own `--description`, and report one table: file, output, alt text.
+   - Web page or app: use `render --format html` (real text: zooms, reflows, translates) and put
+     the CSS from `render --format html --css` on the page once. The HTML label follows the page's
+     color-scheme (light unless the page declares light dark); force it with `--theme`. Use SVG or
+     PNG (`render ... --out label.svg`) for images, video overlays and places that only accept an
      image.
    - Video, for now: render a PNG (`render ... --out label.png --height <about 6% of the shorter
-     side>`) and overlay it for the whole video, away from the player controls:
-     `ffmpeg -i in.mp4 -i label.png -filter_complex "overlay=24:24" -c:a copy out.mp4`.
-     Labels that change with the timeline are not built yet.
+     side>`) and overlay it from the first frame for the whole video, away from the player
+     controls: `ffmpeg -i in.mp4 -i label.png -filter_complex "overlay=24:24" -c:a copy out.mp4`.
+     If it cannot stay for the whole video, show it at the start, at regular intervals and after
+     every break. Put the label sentence in visible text next to the player and say it in the audio
+     (a spoken disclaimer at the start, or a line in the audio description); captions alone do not
+     reach blind viewers. Labels that change with the timeline are not built yet.
    - Audio: put the visual label on the player, cover or page, and tell the user to add a short
-     spoken disclaimer at the start. Audio alone cannot carry a visual label.
+     spoken disclaimer at the start, in the language of the recording; in long or live recordings,
+     repeat it at intervals and after breaks. Put the sentence at the start of the transcript too.
+     Audio alone cannot carry a visual label.
 4. **Publish the alt text and the label sentence** with the content. Alt text = a short description
    of what the image shows, then the label sentence, e.g.
-   `alt="Grey wolf head, front view, digital painting. Generated with AI: image."` Pass
-   `--description` so `stamp` and `render` return it composed. Never use the label sentence alone
-   as the alt of an informative image. When the label is a legal duty, also put the sentence in a
-   visible caption. Text burned into pixels is invisible to screen readers. For a separate label
-   on a page:
-   - inline SVG works as is (it carries `role="img"`, `lang` and an `aria-label`);
+   `alt="Modern house among pine trees, architectural visualisation. Generated with AI: image."`
+   Look at the image and describe what is actually there; do not reuse the example. Pass
+   `--description` so `stamp` and `render` return it composed as `alt`; without it `alt` is null.
+   Never use the label sentence (`disclosure`) alone as the alt of an informative image; it is the
+   alt of the label itself, which `render` returns as `labelAlt`. When the label is a legal duty,
+   also put the sentence in a visible caption. Text burned into pixels is invisible to screen
+   readers. For a separate label on a page:
+   - inline SVG works as is (it carries `role="img"`, `lang` and an `aria-label`); prefer
+     `--format html` for page text that must reflow;
    - as `<img src="label.svg">`, give the img its own alt with the label sentence;
    - when the content's alt or caption already carries the sentence, give the separate label
      `alt=""` or `aria-hidden="true"`, so screen readers do not hear it twice.
@@ -79,12 +100,14 @@ the repository or was copied on its own), or call the CLI through
 | AI was involved and you want your own wording | `--kind basic --text "Voice generated with AI"` |
 | Made by a person, confirmed by the user | `--kind human --media text,image` |
 | AI image with a human-written text | `--kind generated --media image --human text` |
-| A human-made layout, mockup or collage containing an AI-generated element | `--kind modified --media image`, or stamp only the AI element where it appears; run decide with `--realistic` for the element |
+| A human-made layout, mockup or collage containing an AI-generated element | Run decide with `--realistic` for the element. If the post is about the visualisation, crop to the AI element and stamp that; if it shows the whole design, use `--kind modified --media image` with `--description` naming the AI part |
 
 - `--media` lists only the parts that are AI (or, with `--kind human`, the parts made by a person).
   A type cannot be in both `--media` and `--human`.
 - Match the language of the content: `--lang pl` for Polish. Only `en` and `pl` are built in; for
-  another language pass `--text` in that language (plain words, no abbreviation other than "AI").
+  another EU language pass `--lang` with `--text` in that language (plain words, no abbreviation
+  other than "AI"), e.g. `--lang de --text "Mit KI generiert"`. The sentence is then your text
+  alone, so name the part in it ("Stimme mit KI generiert").
 - `--short` gives the compact wording ("Generated"), useful for two labels side by side.
 - `--minimal` drops the text: the author mark (EU "AI" disc, or a hand in the same disc) plus the content-type icons.
   Use it only when the user asks for it or the spot is too small for text (thumbnails, avatars, UI
@@ -93,6 +116,7 @@ the repository or was copied on its own), or call the CLI through
   caption. Without text, "generated" and "modified" look the same, so the alt text must carry the
   difference.
 - The hand mark is this project's design, not an EU icon. It has no meaning under the AI Act.
+  Where you use it, explain it once (a legend, caption or an "about our labels" page).
 - The untouched EU files: `eu generated --variant black --out ai-generated.svg` (also `basic`,
   `modified`; variants `black`, `white`, `black-transparent`, `white-transparent`).
 
@@ -103,7 +127,8 @@ the repository or was copied on its own), or call the CLI through
 - Do not put a human-made label on anything generative AI produced or changed, and do not infer it.
 - Do not use the EU transparent variants on top of photos; their letters can drop below WCAG
   contrast there. Labels drawn by this tool keep 4.5:1 text contrast on any backdrop.
-- Do not shrink a stamped label below its automatic size, cover it with other UI, or animate it.
+- Do not shrink a stamped label below its automatic size, cover it with other UI, animate it
+  (WCAG 2.2.2) or make it flash (WCAG 2.3.1).
 - Stamping changes the pixels, so an existing C2PA manifest stops verifying. If the file had one,
   tell the user to sign it again after stamping.
 

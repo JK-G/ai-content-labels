@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
+
+let sharp = null;
+try {
+  sharp = createRequire(import.meta.url)('sharp');
+} catch {}
 
 const scripts = fileURLToPath(new URL('../skills/ai-content-labels/scripts/', import.meta.url));
 
@@ -77,6 +85,50 @@ test('decide_label returns "unknown" with a question when a deciding fact is mis
   assert.notEqual(r[1].result.isError, true);
   const unknown = json(r[1]);
   assert.equal(unknown.required, 'unknown');
+  assert.equal(unknown.missing, 'realistic');
   assert.match(unknown.question, /genuine photo/);
+  assert.doesNotMatch(unknown.question, /--/);
   assert.equal(json(r[2]).required, false);
+});
+
+test('decide_label asks about editorial review for public-interest text, in MCP terms', async () => {
+  const r = await session([
+    call('decide_label', { media: 'text', origin: 'generated', public_interest: true }),
+    call('decide_label', { media: 'text', origin: 'generated', public_interest: true, editorial_review: false }),
+    call('decide_label', { media: 'image', origin: 'generated', realistic: true, lang: 'de' }),
+  ]);
+  const ask = json(r[1]);
+  assert.equal(ask.required, 'unknown');
+  assert.equal(ask.missing, 'editorial_review');
+  assert.doesNotMatch(ask.question, /--/);
+  assert.equal(json(r[2]).required, true);
+  const de = json(r[3]);
+  assert.equal(de.disclosure, null);
+  assert.equal(de.altText, undefined);
+});
+
+test('schemas: whole-pixel heights, the 24 EU languages', async () => {
+  const r = await session([{ method: 'tools/list' }]);
+  const tools = Object.fromEntries(r[1].result.tools.map((t) => [t.name, t]));
+  assert.equal(tools.render_label.inputSchema.properties.height.type, 'integer');
+  assert.equal(tools.eu_icon.inputSchema.properties.height.type, 'integer');
+  assert.equal(tools.render_label.inputSchema.properties.lang.enum.length, 24);
+  assert.match(tools.decide_label.description, /editorial_review for public-interest text/);
+});
+
+test('stamp_image without a description never hands over the sentence as alt', { skip: !sharp && 'sharp not installed' }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ai-labels-mcp-'));
+  const input = join(dir, 'in.png');
+  await sharp({ create: { width: 800, height: 600, channels: 3, background: '#556' } }).png().toFile(input);
+  const r = await session([
+    call('stamp_image', { input, kind: 'generated', media: ['image'] }),
+    call('render_label', { kind: 'generated', media: ['image'], format: 'html', description: 'A wolf.' }),
+    { method: 'initialize', params: { protocolVersion: '2025-06-18' } },
+  ]);
+  const stamped = json(r[1]);
+  assert.equal(stamped.alt, null);
+  assert.notEqual(stamped.alt, stamped.disclosure);
+  assert.match(stamped.altMissing, /pass description/);
+  assert.equal(json(r[2]).alt, 'A wolf. Generated with AI: image.');
+  assert.match(r[3].result.instructions, /alt is null until you pass description/);
 });

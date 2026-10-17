@@ -39,13 +39,20 @@ test('render prints an SVG, writes files, and reports bad options', () => {
 test('decide prints a verdict and JSON', () => {
   const r = cli('decide', '--media', 'image', '--origin', 'generated', '--realistic');
   assert.equal(r.status, 0);
-  assert.match(r.stdout, /^REQUIRED: Article 50\(4\)/);
+  assert.match(r.stdout, /^REQUIRED: realistic AI image, a deep fake under Article 50\(4\)\n/);
   const j = JSON.parse(cli('decide', '--media', 'text', '--origin', 'generated', '--no-public-interest', '--json').stdout);
   assert.equal(j.required, false);
 });
 
-test('alt prints the sentence', () => {
-  assert.equal(cli('alt', '--media', 'image', '--human', 'text').stdout, 'Generated with AI: image. Made by a human: text.\n');
+test('alt without a description prints the sentence and asks for the description', () => {
+  const r = cli('alt', '--media', 'image', '--human', 'text');
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, 'disclosure: Generated with AI: image. Made by a human: text.\nalt: add --description "what the image shows" to get the full alt text\n');
+  const j = JSON.parse(cli('alt', '--media', 'image', '--json').stdout);
+  assert.equal(j.alt, null);
+  assert.match(j.altMissing, /pass description/);
+  assert.equal(j.disclosure, 'Generated with AI: image.');
+  assert.equal(cli('alt', '--media', 'image', '--description', 'Is this wolf real?').stdout, 'Is this wolf real? Generated with AI: image.\n');
 });
 
 test('eu copies the official file unchanged', () => {
@@ -62,7 +69,7 @@ test('stamp burns the label in, tags the file and returns alt text', { skip: !sh
   assert.equal(r.status, 0, r.stderr);
   const result = JSON.parse(r.stdout);
   assert.ok(existsSync(result.output));
-  assert.equal(result.alt, 'Generated with AI: image.');
+  assert.equal(result.alt, null);
   assert.equal(result.label.theme, 'dark'); // light image, dark label
   assert.equal(result.label.height, 48); // 6% of the shorter side
   assert.equal(result.disclosure, 'Generated with AI: image.');
@@ -126,7 +133,7 @@ test('boolean options accept =false', () => {
 });
 
 test('alt works for text the font cannot draw', () => {
-  assert.equal(cli('alt', '--kind', 'basic', '--text', 'Згенеровано ШІ ґ').stdout, 'Згенеровано ШІ ґ.\n');
+  assert.equal(JSON.parse(cli('alt', '--kind', 'basic', '--text', 'Згенеровано ШІ ґ', '--json').stdout).disclosure, 'Згенеровано ШІ ґ.');
 });
 
 test('stamp keeps EXIF and XMP, fixes the orientation and adds the tag', { skip: !sharp && 'sharp not installed' }, async () => {
@@ -199,7 +206,7 @@ test('decide asks instead of guessing, and exits with 2', () => {
 });
 
 test('alt composes the description and the label sentence', () => {
-  assert.equal(cli('alt', '--kind', 'basic', '--text', 'Made with AI.').stdout, 'Made with AI.\n');
+  assert.match(cli('alt', '--kind', 'basic', '--text', 'Made with AI.').stdout, /^disclosure: Made with AI\.\n/);
   assert.equal(
     cli('alt', '--kind', 'generated', '--media', 'image', '--description', 'Grey wolf head, digital painting.').stdout,
     'Grey wolf head, digital painting. Generated with AI: image.\n'
@@ -216,7 +223,15 @@ test('render validates text, scale and format, and reports the pixel size', { sk
   const png = cli('render', '--media', 'image', '--out', join(tmp, 'scaled.png'), '--scale', '3');
   assert.equal(png.status, 0, png.stderr);
   assert.match(png.stdout, /\(573×96 px, displays at 191×32\)/);
-  assert.match(png.stdout, /^disclosure: Generated with AI: image\.$/m);
+  assert.match(png.stdout, /^text contrast: 14\.78:1$/m);
+  assert.match(png.stdout, /^embed: <img src="scaled\.png" alt="Generated with AI: image\." width="191" height="32"> \(use alt="" if a caption already carries this sentence\)$/m);
+  assert.doesNotMatch(png.stdout, /--description/);
+  const json = JSON.parse(cli('render', '--media', 'image', '--out', join(tmp, 'l.svg'), '--json').stdout);
+  assert.equal(json.alt, null);
+  assert.equal(json.labelAlt, 'Generated with AI: image.');
+  assert.equal(json.wcag, true);
+  const html = JSON.parse(cli('render', '--format', 'html', '--kind', 'generated', '--media', 'image', '--description', 'Wilk', '--lang', 'pl', '--json').stdout);
+  assert.equal(html.alt, 'Wilk. Wygenerowane przez AI: obraz.');
   assert.equal(cli('render', '--format', 'html', '--out', join(tmp, 'x.png')).status, 2);
   const tooSmall = cli('render', '--height', '20');
   assert.equal(tooSmall.status, 2);
@@ -232,6 +247,7 @@ test('stamp takes one image; its JSON has an absolute path and the composed alt'
   await sharp({ create: { width: 900, height: 900, channels: 3, background: '#1b2330' } }).png().toFile(input);
   const r = JSON.parse(cli('stamp', input, '--media', 'image', '--description', 'Grey wolf head', '--json').stdout);
   assert.equal(r.alt, 'Grey wolf head. Generated with AI: image.');
+  assert.equal(r.wcag, true);
   assert.equal(r.disclosure, 'Generated with AI: image.');
   assert.equal(r.label.theme, 'light');
   assert.ok(isAbsolute(r.output));
@@ -241,4 +257,82 @@ test('stamp takes one image; its JSON has an absolute path and the composed alt'
   const overlap = cli('stamp', input, '--media', 'image,text', '--human', 'text', '--out', join(tmp, 'o.png'));
   assert.equal(overlap.status, 2);
   assert.match(overlap.stderr, /text is in both/);
+});
+
+test('stray words, fractional heights and unknown languages are refused', () => {
+  const stray = cli('alt', '--kind', 'basic', '--text', 'Voice', 'generated', 'with', 'AI', '--media', 'voice');
+  assert.equal(stray.status, 2);
+  assert.match(stray.stderr, /unexpected argument "generated"; put text with spaces in quotes: --text "Voice generated with AI"/);
+  for (const command of ['render', 'decide']) assert.equal(cli(command, 'oops').status, 2);
+  assert.equal(cli('eu', 'generated', 'extra').status, 2);
+  const half = cli('render', '--height', '32.5');
+  assert.equal(half.status, 2);
+  assert.match(half.stderr, /whole number of px/);
+  const abc = cli('render', '--height', 'abc');
+  assert.equal(abc.status, 2);
+  assert.match(abc.stderr, /must be a number of px/);
+  assert.equal(cli('render', '--height', '32', '--media', 'image').status, 0);
+  assert.equal(cli('eu', 'generated', '--out', join(tmp, 'eu-ok.svg')).status, 0);
+  assert.equal(cli('render', '--lang', 'xx').status, 2);
+});
+
+test('other EU languages: own text, tagged with its language', () => {
+  const de = cli('render', '--lang', 'de', '--text', 'Mit KI generiert', '--media', 'image');
+  assert.equal(de.status, 0, de.stderr);
+  assert.match(de.stdout, /^<svg [^>]*lang="de"[^>]*aria-label="Mit KI generiert\."/);
+  const fr = cli('render', '--format', 'html', '--lang', 'fr', '--text', 'Généré par IA');
+  assert.match(fr.stdout, /lang="fr"/);
+  assert.doesNotMatch(fr.stdout, /image|Generated/);
+  const missing = cli('render', '--lang', 'de', '--media', 'image');
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /pass --text in that language/);
+});
+
+test('decide is short by default, names the next command, and explains on request', () => {
+  const r = cli('decide', '--media', 'image', '--origin', 'generated', '--realistic');
+  const lines = r.stdout.trimEnd().split('\n');
+  assert.ok(lines.length <= 7, r.stdout);
+  assert.ok(lines[0].length < 90);
+  assert.match(lines[1], /^Next: ai-labels stamp <image> --kind generated --media image --description "what it shows"$/);
+  assert.match(r.stdout, /WCAG 2\.2\.2/);
+  assert.match(r.stdout, /rerun with --explain/);
+  assert.doesNotMatch(r.stdout, /Guidelines paras 113-115/);
+  const full = cli('decide', '--media', 'image', '--origin', 'generated', '--realistic', '--explain');
+  assert.match(full.stdout, /Guidelines paras 113-115/);
+  assert.match(full.stdout, /^Source: /m);
+  const video = cli('decide', '--media', 'video', '--origin', 'generated', '--realistic').stdout;
+  assert.match(video, /Sub-measure 1\.2\.2\(b\)/);
+  assert.match(video, /WCAG 1\.2\.5/);
+  assert.match(cli('decide', '--media', 'audio', '--origin', 'modified', '--realistic', '--lang', 'pl').stdout, /To nagranie zawiera głos wygenerowany przez AI/);
+  const human = cli('decide', '--media', 'image', '--origin', 'human').stdout;
+  assert.match(human, /Made by a human/);
+  assert.doesNotMatch(human, /Generated with AI/);
+  const json = JSON.parse(cli('decide', '--media', 'image', '--origin', 'generated', '--realistic', '--json').stdout);
+  assert.equal(json.disclosure, 'Generated with AI: image.');
+  assert.equal(json.altText, undefined);
+  assert.match(json.verdict, /^REQUIRED/);
+});
+
+test('decide asks about editorial review for public-interest text', () => {
+  const ask = cli('decide', '--media', 'text', '--origin', 'generated', '--public-interest');
+  assert.equal(ask.status, 2);
+  assert.match(ask.stdout, /^UNKNOWN: .*editorial responsibility\? Rerun with --editorial-review or --no-editorial-review\./);
+  assert.match(cli('decide', '--media', 'text', '--origin', 'generated', '--public-interest', '--editorial-review').stdout, /^NOT REQUIRED/);
+  assert.match(cli('decide', '--media', 'text', '--origin', 'generated', '--public-interest', '--no-editorial-review').stdout, /^REQUIRED/);
+  const json = JSON.parse(cli('decide', '--json', '--media', 'text', '--origin', 'generated', '--public-interest').stdout);
+  assert.equal(json.required, 'unknown');
+  assert.equal(json.missing, 'editorial_review');
+});
+
+test('stamp summary: pill colour, mark contrast for minimal, a WCAG warning below 4.5:1', { skip: !sharp && 'sharp not installed' }, async () => {
+  const input = join(tmp, 'summary.png');
+  await sharp({ create: { width: 900, height: 600, channels: 3, background: '#30343a' } }).png().toFile(input);
+  const minimal = cli('stamp', input, '--media', 'image', '--minimal', '--out', join(tmp, 'summary-min.png'));
+  assert.equal(minimal.status, 0, minimal.stderr);
+  assert.match(minimal.stdout, /light pill, top-left, mark contrast 14\.78:1/);
+  assert.doesNotMatch(minimal.stdout, /text contrast/);
+  const low = cli('stamp', input, '--media', 'image', '--background-opacity', '0.3', '--allow-low-contrast', '--out', join(tmp, 'summary-low.png'));
+  assert.match(low.stdout, /\(below WCAG 1\.4\.3, 4\.5:1\)/);
+  const lowJson = JSON.parse(cli('stamp', input, '--media', 'image', '--background-opacity', '0.3', '--allow-low-contrast', '--out', join(tmp, 'summary-low2.png'), '--json').stdout);
+  assert.equal(lowJson.wcag, false);
 });

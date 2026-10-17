@@ -1,8 +1,8 @@
 import { createRequire } from 'node:module';
 import { extname, join, dirname } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, renameSync, unlinkSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { renderLabel, POSITIONS, THEMES } from './render.mjs';
+import { renderLabel, POSITIONS, THEMES, ALT_MISSING } from './render.mjs';
 import { over, parseHex, contrastRatio } from './contrast.mjs';
 import { UsageError, parseBoolean } from './i18n.mjs';
 
@@ -38,41 +38,51 @@ const DIGITAL_SOURCE = {
   modified: 'http://cv.iptc.org/newscodes/digitalsourcetype/compositeWithTrainedAlgorithmicMedia',
 };
 
-// Our own XMP property, written next to the DigitalSourceType, that says a visible label was burned
-// in. The DigitalSourceType alone cannot say that: AI generators write it into unlabelled images.
+// Our own XMP property that says a visible label was burned in. It is written on every stamp
+// (human-made and --no-metadata included), so a labelled file is never stamped again by mistake.
+// The DigitalSourceType alone cannot say that: AI generators write it into unlabelled images.
 export const LABEL_NS = 'https://github.com/JK-G/ai-content-labels/xmp/1.0/';
 const labelDescription = (kind) => `<rdf:Description rdf:about="" xmlns:aicl="${LABEL_NS}"><aicl:VisibleLabel>${kind}</aicl:VisibleLabel></rdf:Description>`;
+const MARKER = /<aicl:VisibleLabel>([^<]*)<\/aicl:VisibleLabel>/;
+const sourceDescription = (type) =>
+  '<rdf:Description rdf:about="" xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/">' +
+  `<Iptc4xmpExt:DigitalSourceType>${type}</Iptc4xmpExt:DigitalSourceType></rdf:Description>`;
 
-export function digitalSourceXmp(kind) {
-  const type = DIGITAL_SOURCE[kind];
-  if (!type) return null;
+// The kind an earlier stamp recorded ("generated", "human", ...), "" for a marker without a value,
+// null when the file has no marker.
+export function labelledAs(xmp) {
+  if (!xmp?.includes(LABEL_NS)) return null;
+  return xmp.match(MARKER)?.[1] ?? '';
+}
+
+// A new XMP packet with the marker and, when `sourceType` is set, the IPTC DigitalSourceType.
+// By default the DigitalSourceType is the one for the kind (none for basic and human).
+export function digitalSourceXmp(kind, { sourceType = DIGITAL_SOURCE[kind] ?? null } = {}) {
   return (
     '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>' +
     '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
-    '<rdf:Description rdf:about="" xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/">' +
-    `<Iptc4xmpExt:DigitalSourceType>${type}</Iptc4xmpExt:DigitalSourceType>` +
-    `</rdf:Description>${labelDescription(kind)}</rdf:RDF></x:xmpmeta><?xpacket end="w"?>`
+    (sourceType ? sourceDescription(sourceType) : '') +
+    `${labelDescription(kind)}</rdf:RDF></x:xmpmeta><?xpacket end="w"?>`
   );
 }
 
-// Adds the DigitalSourceType to the XMP packet the file already has, keeping everything else
-// (rights, credit, captions). Without a readable packet, starts a new one.
-export function mergeXmp(existing, kind) {
-  const type = DIGITAL_SOURCE[kind];
-  if (!existing || existing.lastIndexOf('</rdf:RDF>') < 0) return digitalSourceXmp(kind);
-  const element = /<Iptc4xmpExt:DigitalSourceType>[^<]*<\/Iptc4xmpExt:DigitalSourceType>/;
-  const attribute = /Iptc4xmpExt:DigitalSourceType="[^"]*"/;
-  let merged;
-  if (element.test(existing)) merged = existing.replace(element, `<Iptc4xmpExt:DigitalSourceType>${type}</Iptc4xmpExt:DigitalSourceType>`);
-  else if (attribute.test(existing)) merged = existing.replace(attribute, `Iptc4xmpExt:DigitalSourceType="${type}"`);
-  else {
-    const close = existing.lastIndexOf('</rdf:RDF>');
-    merged =
-      existing.slice(0, close) +
-      '<rdf:Description rdf:about="" xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/">' +
-      `<Iptc4xmpExt:DigitalSourceType>${type}</Iptc4xmpExt:DigitalSourceType></rdf:Description>` +
-      existing.slice(close);
+// Adds the marker (and the DigitalSourceType, when set) to the XMP packet the file already has,
+// keeping everything else (rights, credit, captions). Without a readable packet, starts a new one.
+export function mergeXmp(existing, kind, { sourceType = DIGITAL_SOURCE[kind] ?? null } = {}) {
+  if (!existing || existing.lastIndexOf('</rdf:RDF>') < 0) return digitalSourceXmp(kind, { sourceType });
+  let merged = existing;
+  if (sourceType) {
+    const element = /<Iptc4xmpExt:DigitalSourceType>[^<]*<\/Iptc4xmpExt:DigitalSourceType>/;
+    const attribute = /Iptc4xmpExt:DigitalSourceType="[^"]*"/;
+    if (element.test(merged)) merged = merged.replace(element, `<Iptc4xmpExt:DigitalSourceType>${sourceType}</Iptc4xmpExt:DigitalSourceType>`);
+    else if (attribute.test(merged)) merged = merged.replace(attribute, `Iptc4xmpExt:DigitalSourceType="${sourceType}"`);
+    else {
+      const close = merged.lastIndexOf('</rdf:RDF>');
+      merged = merged.slice(0, close) + sourceDescription(sourceType) + merged.slice(close);
+    }
   }
+  // A forced restamp records the new kind in the existing marker.
+  if (MARKER.test(merged)) return merged.replace(MARKER, `<aicl:VisibleLabel>${kind}</aicl:VisibleLabel>`);
   if (merged.includes(LABEL_NS)) return merged;
   const close = merged.lastIndexOf('</rdf:RDF>');
   return merged.slice(0, close) + labelDescription(kind) + merged.slice(close);
@@ -97,15 +107,18 @@ export async function stampImage(input, output, opts = {}) {
   }
 
   // Pixels after EXIF rotation, for the size and for picking the theme.
-  let data, info, existingXmp;
+  let data, info, meta;
   try {
-    ({ data, info } = await sharp(input).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true }));
-    existingXmp = (await sharp(input).metadata()).xmp?.toString('utf8').replace(/\0+$/, '');
+    meta = await sharp(input).metadata();
+    if ((meta.pages ?? 1) <= 1) ({ data, info } = await sharp(input).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true }));
   } catch (e) {
     throw new Error(`could not read ${input}: ${e.message}`);
   }
-  if (existingXmp?.includes(LABEL_NS) && !parseBoolean(opts.force, '--force')) {
-    throw new UsageError('already labelled (an ai-content-labels marker is in the XMP); pass --force to stamp again');
+  if ((meta.pages ?? 1) > 1) throw new UsageError(`animated images are not supported yet (${meta.pages} frames); export a still frame, or wait for video labels`);
+  const existingXmp = meta.xmp?.toString('utf8').replace(/\0+$/, '');
+  const previous = labelledAs(existingXmp);
+  if (previous != null && !parseBoolean(opts.force, '--force')) {
+    throw new UsageError(`already labelled${previous ? ` as ${previous}` : ''} (an ai-content-labels marker is in the XMP); pass --force to stamp again`);
   }
   const { width: W, height: H } = info;
 
@@ -137,22 +150,36 @@ export async function stampImage(input, output, opts = {}) {
     label = renderLabel({ ...opts, height: label.height, theme });
   }
 
-  // Keep the input's EXIF, ICC profile and XMP; add the DigitalSourceType for AI labels.
+  // Keep the input's EXIF, ICC profile and XMP; always add the visible-label marker, and the
+  // DigitalSourceType for AI labels unless --no-metadata.
   let pipeline = sharp(input).rotate().composite([{ input: Buffer.from(label.svg), left, top }]).keepIccProfile().keepExif();
   const tag = label.options.metadata && DIGITAL_SOURCE[label.options.kind];
-  const xmp = tag ? mergeXmp(existingXmp, label.options.kind) : existingXmp;
-  if (xmp) pipeline = pipeline.withXmp(xmp);
+  pipeline = pipeline.withXmp(mergeXmp(existingXmp, label.options.kind, { sourceType: tag || null }));
   pipeline = format.apply(pipeline);
-  await pipeline.toFile(output);
+  // Write next to the output and rename, so nobody sees a half-written file.
+  const part = `${output}.part`;
+  try {
+    await pipeline.toFile(part);
+    renameSync(part, output);
+  } catch (e) {
+    if (existsSync(part)) unlinkSync(part);
+    throw e;
+  }
 
   return {
     output,
     image: { width: W, height: H },
     label: { left, top, width: label.width, height: label.height, theme, position, separation: Math.round(separation(theme) * 100) / 100 },
     alt: label.alt,
+    ...(label.alt == null && { altMissing: ALT_MISSING }),
     disclosure: label.disclosure,
     contrast: label.contrast,
-    metadata: tag ? `XMP DigitalSourceType ${tag.split('/').pop()}` : null,
+    wcag: label.wcag,
+    metadata: tag
+      ? `XMP DigitalSourceType ${tag.split('/').pop()}`
+      : label.options.metadata
+        ? 'XMP ai-content-labels marker only: IPTC has no DigitalSourceType term for this label'
+        : 'XMP ai-content-labels marker only (no DigitalSourceType, --no-metadata)',
   };
 }
 
@@ -184,6 +211,7 @@ export function formatFor(output) {
     '.tiff': (p) => p.tiff(),
   };
   const apply = map[ext];
+  if (ext === '.gif') throw new UsageError('GIF output is not supported; pass --out name.png or name.webp');
   if (!apply) throw new UsageError(`unsupported output format "${ext || '(none)'}"; use .jpg, .png, .webp, .avif or .tiff`);
   return { apply };
 }

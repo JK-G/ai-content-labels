@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { euBasic, mediaIcons, euFile } from './assets.mjs';
 import { textPaths, measure, capHeight, missingGlyphs, round } from './text.mjs';
 import { worstCaseContrast, WCAG } from './contrast.mjs';
-import { strings, sentence, parseBoolean, KINDS, MEDIA, UsageError } from './i18n.mjs';
+import { strings, sentence, parseBoolean, hasWording, noWording, KINDS, MEDIA, UsageError } from './i18n.mjs';
 
 export const THEMES = {
   light: { background: '#ffffff', backgroundOpacity: 0.94, ink: '#1d1d1b', border: '#1d1d1b', borderOpacity: 0.14, eu: 'black' },
@@ -22,6 +22,9 @@ const clean = (v) => (v == null ? undefined : String(v).normalize('NFC').trim())
 const bool = (input, key, name) => parseBoolean(input[key], name) ?? false;
 
 export function normalize(input = {}) {
+  const height = Number(input.height ?? 32);
+  if (Number.isNaN(height)) throw new UsageError('--height must be a number of px');
+  if (!Number.isInteger(height)) throw new UsageError('--height must be a whole number of px (half pixels blur the label)');
   const o = {
     kind: input.kind ?? 'generated',
     media: [...new Set(toList(input.media))],
@@ -33,7 +36,7 @@ export function normalize(input = {}) {
     short: bool(input, 'short', '--short'),
     uppercase: bool(input, 'uppercase', '--uppercase'),
     theme: input.theme ?? 'light',
-    height: Number(input.height ?? 32),
+    height,
     minimal: bool(input, 'minimal', '--minimal'),
     backgroundOpacity: input.backgroundOpacity == null ? undefined : Number(input.backgroundOpacity),
     allowLowContrast: bool(input, 'allowLowContrast', '--allow-low-contrast'),
@@ -59,6 +62,11 @@ export function normalize(input = {}) {
     throw new UsageError('background opacity must be between 0 and 1');
   }
   strings(o.lang);
+  // An EU language without built-in wording: the label text comes from the user, in that language.
+  if (!hasWording(o.lang)) {
+    if (o.text == null) throw new UsageError(noWording(o.lang));
+    if (o.kind !== 'human' && o.human.length && o.humanText == null) throw new UsageError(noWording(o.lang, '--human-text'));
+  }
   return o;
 }
 
@@ -97,9 +105,9 @@ export function renderLabel(input) {
   const disclosure = labelSentence(o);
   const W = width;
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" lang="${o.lang}" xml:lang="${o.lang}" role="img" aria-label="${xml(disclosure)}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;height:auto" lang="${o.lang}" xml:lang="${o.lang}" role="img" aria-label="${xml(disclosure)}">` +
     `<title>${xml(disclosure)}</title>${body}</svg>`;
-  return { svg, width: W, height: H, alt: altText(o), disclosure, contrast: round(contrast, 2), options: o };
+  return { svg, width: W, height: H, alt: composeAlt(o), disclosure, contrast: round(contrast, 2), wcag: contrast >= WCAG.text, options: o };
 }
 
 // The label as one sentence for screen readers: "Generated with AI: image. Made by a human: text."
@@ -111,11 +119,16 @@ export function labelSentence(o) {
 }
 
 // The alt text of the labelled content: what it shows, then the label sentence. Without a
-// description it is the sentence alone, which is right for the label itself but not for the image.
-export function altText(o) {
-  const disclosure = labelSentence(o);
-  return o.description ? `${o.description.replace(/[\s.]+$/, '')}. ${disclosure}` : disclosure;
+// description there is no alt text: the sentence alone is the alt of the label, not of the image.
+export function composeAlt(o) {
+  if (!o.description) return null;
+  const d = o.description.replace(/\s+$/, '');
+  const sep = /[.!?…]$/.test(d) ? ' ' : '. ';
+  return d + sep + labelSentence(o);
 }
+
+// What a result says instead of an alt text when no description was passed.
+export const ALT_MISSING = 'pass description (what the image shows) to get the alt text: description + disclosure';
 
 // One pill: the author mark (EU "AI" disc, or a hand in the same disc), the text unless minimal, then the media icons.
 function pill({ kind, text, media, o, theme }) {
@@ -127,7 +140,8 @@ function pill({ kind, text, media, o, theme }) {
   const inset = H * 0.125;
   const markBox = H - 2 * inset;
   // Slightly larger type on the smallest labels, where 0.4H would drop under 10 px.
-  const fontSize = o.uppercase ? (H < 28 ? H * 0.37 : H * 0.34) : H < 28 ? H * 0.44 : H * 0.4;
+  // Spaced capitals never below 10 px, so a 24 px upper-case label stays legible.
+  const fontSize = o.uppercase ? Math.max(10, H < 28 ? H * 0.37 : H * 0.34) : H < 28 ? H * 0.44 : H * 0.4;
   const tracking = o.uppercase ? 0.06 : 0;
   const iconSize = H * 0.5;
   const iconGap = H * 0.14;

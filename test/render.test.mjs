@@ -5,17 +5,20 @@ import { renderLabel, officialIcon, THEMES } from '../skills/ai-content-labels/s
 import { worstCaseContrast, contrastRatio, WCAG } from '../skills/ai-content-labels/scripts/lib/contrast.mjs';
 import { KINDS, MEDIA, LANGS, sentence } from '../skills/ai-content-labels/scripts/lib/i18n.mjs';
 import { VERSION } from '../skills/ai-content-labels/scripts/lib/version.mjs';
+import { font } from '../skills/ai-content-labels/scripts/lib/assets.mjs';
+import { round } from '../skills/ai-content-labels/scripts/lib/text.mjs';
 
 test('every kind renders in every language and theme', () => {
   for (const kind of KINDS) {
     for (const lang of Object.keys(LANGS)) {
       for (const theme of Object.keys(THEMES)) {
         for (const opts of [{}, { short: true }, { uppercase: true }]) {
-          const { svg, width, height, alt } = renderLabel({ kind, lang, theme, media: 'image', ...opts });
+          const { svg, width, height, alt, disclosure } = renderLabel({ kind, lang, theme, media: 'image', ...opts });
           assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="\d+" height="32"/);
           assert.match(svg, /role="img" aria-label="[^"]+"><title>/);
           assert.ok(width > height, `${kind}/${lang}/${theme} is wider than tall`);
-          assert.ok(alt.endsWith('.'));
+          assert.ok(disclosure.endsWith('.'));
+          assert.equal(alt, null);
         }
       }
     }
@@ -31,12 +34,12 @@ test('media icons and a human part make the label wider', () => {
 });
 
 test('alt text names the parts in the label language', () => {
-  assert.equal(renderLabel({ media: 'image,voice' }).alt, 'Generated with AI: image and voice.');
+  assert.equal(renderLabel({ media: 'image,voice' }).disclosure, 'Generated with AI: image and voice.');
   assert.equal(
-    renderLabel({ media: 'image', human: 'text', lang: 'pl' }).alt,
+    renderLabel({ media: 'image', human: 'text', lang: 'pl' }).disclosure,
     'Wygenerowane przez AI: obraz. Stworzone przez człowieka: tekst.'
   );
-  assert.equal(renderLabel({ kind: 'basic', text: 'Voice generated with AI' }).alt, 'Voice generated with AI.');
+  assert.equal(renderLabel({ kind: 'basic', text: 'Voice generated with AI' }).disclosure, 'Voice generated with AI.');
 });
 
 test('built-in themes keep WCAG text contrast on any backdrop', () => {
@@ -85,7 +88,7 @@ test('minimal: mark and icons only, same alt text', () => {
   const full = renderLabel({ media: 'image,voice', lang: 'pl' });
   const minimal = renderLabel({ media: 'image,voice', lang: 'pl', minimal: true });
   assert.ok(minimal.width < full.width / 2);
-  assert.equal(minimal.alt, full.alt);
+  assert.equal(minimal.disclosure, full.disclosure);
   // No glyph group: the only scaled groups are the EU disc and the two icons.
   assert.equal((minimal.svg.match(/scale\(/g) ?? []).length, 3);
   for (const kind of KINDS) for (const m of MEDIA) assert.doesNotThrow(() => renderLabel({ kind, media: m, minimal: true }));
@@ -109,7 +112,7 @@ test('version matches package.json', () => {
 test('decomposed (NFD) text is normalised and finds its glyphs', () => {
   const nfd = 'Café generated with AI';
   assert.doesNotThrow(() => renderLabel({ kind: 'basic', text: nfd }));
-  assert.equal(renderLabel({ kind: 'basic', text: nfd }).alt, 'Café generated with AI.');
+  assert.equal(renderLabel({ kind: 'basic', text: nfd }).disclosure, 'Café generated with AI.');
 });
 
 test('sentence drops the custom text\'s own full stop', () => {
@@ -122,13 +125,19 @@ test('alt text = description, then the label sentence; disclosure is the sentenc
   assert.equal(l.alt, 'Grey wolf head, digital painting. Generated with AI: image.');
   assert.equal(l.disclosure, 'Generated with AI: image.');
   assert.match(l.svg, /aria-label="Generated with AI: image\."/);
-  assert.equal(renderLabel({ media: 'image', description: '   ' }).alt, 'Generated with AI: image.');
+  assert.equal(renderLabel({ media: 'image', description: 'A wolf.' }).alt, 'A wolf. Generated with AI: image.');
+  assert.equal(renderLabel({ media: 'image', description: 'A wolf' }).alt, 'A wolf. Generated with AI: image.');
+  assert.equal(renderLabel({ media: 'image', description: 'Is this wolf real?' }).alt, 'Is this wolf real? Generated with AI: image.');
+  assert.equal(renderLabel({ media: 'image', description: 'A wolf…' }).alt, 'A wolf… Generated with AI: image.');
+  // No description, no alt text: the sentence alone is the alt of the label, never of the image.
+  assert.equal(renderLabel({ media: 'image' }).alt, null);
+  assert.equal(renderLabel({ media: 'image', description: '   ' }).alt, null);
 });
 
 test('empty, duplicated and contradictory input is refused or cleaned', () => {
   assert.throws(() => renderLabel({ text: '   ' }), /--text is empty/);
   assert.throws(() => renderLabel({ media: 'image', human: 'text', humanText: '' }), /--human-text is empty/);
-  assert.equal(renderLabel({ media: 'image,image' }).alt, 'Generated with AI: image.');
+  assert.equal(renderLabel({ media: 'image,image' }).disclosure, 'Generated with AI: image.');
   assert.throws(() => renderLabel({ media: 'image,text', human: 'text' }), /text is in both --media and --human/);
   assert.throws(() => renderLabel({ short: 'maybe' }), /true or false/);
   assert.equal(renderLabel({ short: 'false' }).width, renderLabel({}).width);
@@ -149,6 +158,37 @@ test('whole-pixel geometry: root width, pill edge and a half-pixel divider', () 
   const line = svg.match(/<line x1="([\d.]+)"/);
   assert.equal(Number(line[1]) % 1, 0.5);
   for (const h of [20, 24, 28, 32, 40, 48]) assert.ok(Number.isInteger(renderLabel({ media: 'image', human: 'text', minimal: true, height: h }).width));
+});
+
+test('height is a whole number of px', () => {
+  assert.throws(() => renderLabel({ height: 32.5 }), /whole number of px/);
+  assert.throws(() => renderLabel({ height: 'abc' }), /must be a number of px/);
+  assert.doesNotThrow(() => renderLabel({ height: '32' }));
+});
+
+test('the SVG scales down in a narrow container instead of being clipped', () => {
+  assert.match(renderLabel({ media: 'image' }).svg, /^<svg [^>]*style="max-width:100%;height:auto"/);
+});
+
+test('spaced capitals are never set below 10 px', () => {
+  const scale = (px) => `scale(${round(px / font().unitsPerEm, 5)})`;
+  assert.ok(renderLabel({ height: 24, uppercase: true, media: 'image' }).svg.includes(scale(10)));
+  assert.ok(renderLabel({ height: 40, uppercase: true }).svg.includes(scale(40 * 0.34)));
+});
+
+test('any EU language with its own text; lang and the sentence follow it', () => {
+  const de = renderLabel({ lang: 'de', text: 'Mit KI generiert', media: 'image' });
+  assert.match(de.svg, /^<svg [^>]*lang="de" xml:lang="de"[^>]*aria-label="Mit KI generiert\."/);
+  assert.equal(de.disclosure, 'Mit KI generiert.');
+  assert.throws(() => renderLabel({ lang: 'de', media: 'image' }), /no built-in wording for "de"; pass --text/);
+  assert.throws(() => renderLabel({ lang: 'de', text: 'Mit KI generiert', human: 'text' }), /pass --human-text/);
+  assert.equal(renderLabel({ lang: 'de', text: 'Mit KI generiert', human: 'text', humanText: 'Von Menschen geschrieben' }).disclosure, 'Mit KI generiert. Von Menschen geschrieben.');
+  assert.throws(() => renderLabel({ lang: 'xx', text: 'x' }), /24 EU codes/);
+});
+
+test('the result says whether the label meets WCAG text contrast', () => {
+  assert.equal(renderLabel({}).wcag, true);
+  assert.equal(renderLabel({ backgroundOpacity: 0.3, allowLowContrast: true }).wcag, false);
 });
 
 test('the SVG declares its language', () => {

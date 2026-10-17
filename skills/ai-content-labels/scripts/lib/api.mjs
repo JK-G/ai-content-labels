@@ -1,6 +1,6 @@
-import { writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, copyFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, extname, join, basename, resolve } from 'node:path';
-import { renderLabel, officialIcon, normalize, labelSentence, altText } from './render.mjs';
+import { renderLabel, officialIcon, normalize, labelSentence, composeAlt, ALT_MISSING } from './render.mjs';
 import { renderHtml, LABEL_CSS } from './html.mjs';
 import { stampImage, loadSharp, formatFor } from './stamp.mjs';
 import { decide } from './decide.mjs';
@@ -24,7 +24,18 @@ export async function render(opts = {}) {
   if (parseBoolean(opts.css, '--css')) throw new UsageError('--css goes with --format html');
   const scale = scaleOf(opts);
   const label = renderLabel(opts);
-  const result = { width: label.width, height: label.height, alt: label.alt, disclosure: label.disclosure, contrast: label.contrast };
+  // alt is for the content the label describes (null without a description); labelAlt is the alt of
+  // an <img> that shows this label on its own.
+  const result = {
+    width: label.width,
+    height: label.height,
+    alt: label.alt,
+    ...(label.alt == null && { altMissing: ALT_MISSING }),
+    labelAlt: label.disclosure,
+    disclosure: label.disclosure,
+    contrast: label.contrast,
+    wcag: label.wcag,
+  };
   if (opts.out) {
     const out = resolve(opts.out);
     await writeImage(label.svg, out, scale);
@@ -41,7 +52,8 @@ async function renderHtmlLabel(opts) {
   if (opts.scale != null) throw new UsageError('--scale applies to PNG and WebP, not to --format html');
   if (parseBoolean(opts.css, '--css')) return { css: LABEL_CSS };
   const label = renderHtml(opts);
-  const result = { html: label.html, css: label.css, alt: label.alt, disclosure: label.disclosure };
+  const { html, css, ...rest } = label;
+  const result = { html, css, ...rest };
   if (opts.out) {
     const out = resolve(opts.out);
     const ext = extname(out).toLowerCase();
@@ -53,12 +65,18 @@ async function renderHtmlLabel(opts) {
   return result;
 }
 
+// Outputs being written right now, so two parallel calls cannot both pass the "exists" check.
+const inFlight = new Set();
+
 export async function stamp(input, opts = {}) {
   if (!input) throw new UsageError('stamp needs an input image');
   // Label options first: a contradictory label is the user's first problem, not an existing output.
   normalize({ ...opts, height: opts.height ?? 32 });
   const source = resolve(input);
   if (!existsSync(source)) throw new UsageError(`input not found: ${input}`);
+  if (statSync(source).isDirectory()) {
+    throw new UsageError('input is a folder; stamp takes one file. List the images (jpg, png, webp, avif, tiff) and run it once per file; batch mode is planned');
+  }
   const force = parseBoolean(opts.force, '--force') ?? false;
   const ext = extname(source);
   const output = resolve(opts.out ?? join(dirname(source), `${basename(source, ext)}.ai-label${ext}`));
@@ -68,9 +86,16 @@ export async function stamp(input, opts = {}) {
   if (/\.ai-label\.[^.]+$/i.test(basename(source)) && !force) {
     throw new UsageError(`already labelled by name (${basename(source)}); stamp the original instead, or pass --force`);
   }
+  const key = process.platform === 'win32' ? output.toLowerCase() : output;
+  if (inFlight.has(key)) throw new UsageError(`${output} is being written by another call`);
   if (existsSync(output) && !force) throw new UsageError(`${output} exists; pass --force to overwrite`);
-  mkdirSync(dirname(output), { recursive: true });
-  return stampImage(source, output, { ...opts, force });
+  inFlight.add(key);
+  try {
+    mkdirSync(dirname(output), { recursive: true });
+    return await stampImage(source, output, { ...opts, force });
+  } finally {
+    inFlight.delete(key);
+  }
 }
 
 export function decideLabel(opts) {
@@ -79,7 +104,8 @@ export function decideLabel(opts) {
 
 export function alt(opts) {
   const o = normalize(opts);
-  return { alt: altText(o), disclosure: labelSentence(o) };
+  const text = composeAlt(o);
+  return { alt: text, ...(text == null && { altMissing: ALT_MISSING }), disclosure: labelSentence(o) };
 }
 
 export async function eu(name, opts = {}) {
@@ -90,12 +116,14 @@ export async function eu(name, opts = {}) {
   if (!opts.out) return { file: icon.file, svg: icon.svg, alt };
   const out = resolve(opts.out);
   const scale = scaleOf(opts);
+  const height = Number(opts.height ?? 0);
+  if (!Number.isInteger(height) || height < 0 || height > 4096) throw new UsageError('--height must be a whole number of px, up to 4096');
   const result = { file: icon.file, out, alt };
   if (extname(out).toLowerCase() === '.svg') {
     mkdirSync(dirname(out), { recursive: true });
     copyFileSync(icon.file, out);
   } else {
-    const info = await writeImage(icon.svg, out, scale, Number(opts.height ?? 0));
+    const info = await writeImage(icon.svg, out, scale, height);
     result.pixels = { width: info.width, height: info.height };
   }
   return result;

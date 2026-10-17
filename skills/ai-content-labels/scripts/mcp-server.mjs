@@ -2,7 +2,7 @@
 // MCP server (stdio) for ai-content-labels. No dependencies: newline-delimited JSON-RPC 2.0.
 import { createInterface } from 'node:readline';
 import { render, stamp, decideLabel, eu } from './lib/api.mjs';
-import { KINDS, MEDIA, LANGS } from './lib/i18n.mjs';
+import { KINDS, MEDIA, EU_LANGS } from './lib/i18n.mjs';
 import { POSITIONS, EU_ICONS, EU_VARIANTS } from './lib/render.mjs';
 import { VERSION } from './lib/version.mjs';
 
@@ -14,21 +14,21 @@ const labelProps = {
   kind: { type: 'string', enum: KINDS, description: 'generated (fully AI), modified (real content changed by AI), basic (AI involved, use with text), human (made by a person)' },
   media: { type: 'array', items: { type: 'string', enum: MEDIA }, description: 'What was made with AI (or by a human for kind=human); shown as icons' },
   human: { type: 'array', items: { type: 'string', enum: MEDIA }, description: 'Parts made by a human, shown as a second label next to the AI one' },
-  lang: { type: 'string', enum: Object.keys(LANGS), description: 'Label language, default en' },
+  lang: { type: 'string', enum: EU_LANGS, description: 'Label language, default en. Built-in wording: en, pl; other EU languages need text (and human_text)' },
   text: { type: 'string', description: 'Own label text instead of the default wording' },
   human_text: { type: 'string', description: 'Own text for the human-made part' },
   description: { type: 'string', description: 'What the image shows, one short phrase; it goes before the label sentence in the alt text' },
   short: { type: 'boolean', description: 'Compact wording, e.g. "Generated"' },
   uppercase: { type: 'boolean', description: 'Upper case with letter spacing, like the EU icons' },
   minimal: { type: 'boolean', description: 'No text: only the author mark (EU "AI" disc, or a hand in the same disc) and the content-type icons. For tight spots, or where a caption already says it in words' },
-  height: { type: 'number', description: 'Label height in px: at least 24 with text, 20 with minimal' },
+  height: { type: 'integer', description: 'Label height in whole px: at least 24 with text, 20 with minimal' },
 };
 
 const TOOLS = [
   {
     name: 'decide_label',
     description:
-      'Decide which AI label a piece of content needs and whether Article 50(4) of the EU AI Act requires it (deep fakes, public-interest text without editorial review). Returns the label to use, the EU icon, placement and accessibility rules, and the label sentence. When a deciding fact is missing it returns required:"unknown" and one question: ask the user, never guess. A checklist, not legal advice. Call this before render_label or stamp_image.',
+      'Decide which AI label a piece of content needs and whether Article 50(4) of the EU AI Act requires it (deep fakes, public-interest text without editorial review). Returns a short verdict, the label to use, the EU icon, placement and accessibility rules, and the label sentence (disclosure). When a deciding fact is missing (realistic for image, video and audio; public_interest, or editorial_review for public-interest text) it returns required:"unknown", the argument in `missing` and one question: ask the user, never guess. A checklist, not legal advice. Call this before render_label or stamp_image.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -48,7 +48,7 @@ const TOOLS = [
           description:
             'A person with relevant knowledge checked the substance (at least fact-checked it; a spell-check or quick approval does not count), no AI changes after sign-off, and a named person or company holds editorial responsibility',
         },
-        lang: { type: 'string', enum: Object.keys(LANGS) },
+        lang: { type: 'string', enum: EU_LANGS, description: 'Built-in wording: en, pl; for other EU languages disclosure is null and you write the sentence' },
       },
       required: ['media', 'origin'],
       additionalProperties: false,
@@ -58,13 +58,13 @@ const TOOLS = [
   {
     name: 'render_label',
     description:
-      'Draw a label (official EU "AI" icon + text + content-type icons, or a human-made label). format svg (default) writes `out` (.svg, .png, .webp) or, with inline:true, returns the SVG text; format html returns a snippet with real text plus its CSS, for web pages. Text contrast is at least 4.5:1 on any backdrop.',
+      'Draw a label (official EU "AI" icon + text + content-type icons, or a human-made label). format svg (default) writes `out` (.svg, .png, .webp) or, with inline:true, returns the SVG text; format html returns a snippet with real text plus its CSS, for web pages. Text contrast is at least 4.5:1 on any backdrop (wcag: true in the result).',
     inputSchema: {
       type: 'object',
       properties: {
         ...labelProps,
         theme: { type: 'string', enum: ['light', 'dark'] },
-        format: { type: 'string', enum: ['svg', 'html'], description: 'html: real text that zooms, reflows, translates and follows dark mode; use it for web pages and UI' },
+        format: { type: 'string', enum: ['svg', 'html'], description: "html: real text that zooms, reflows, translates and follows the page's color-scheme; use it for web pages and UI" },
         out: { type: 'string', description: `Optional output path. ${PATH_NOTE}` },
         inline: { type: 'boolean', description: 'Without out: return the SVG text in the result' },
         scale: { type: 'number', description: 'PNG and WebP pixel density, 0.5 to 16, default 1' },
@@ -86,7 +86,7 @@ const TOOLS = [
         ...labelProps,
         theme: { type: 'string', enum: ['auto', 'light', 'dark'], description: 'auto (default) picks the label colour from the image' },
         position: { type: 'string', enum: POSITIONS, description: 'Default top-left' },
-        metadata: { type: 'boolean', description: 'Write the XMP tag, default true' },
+        metadata: { type: 'boolean', description: 'Write the IPTC DigitalSourceType tag, default true; the ai-content-labels marker that prevents double stamping is always written' },
         force: { type: 'boolean', description: 'Overwrite an existing output, or stamp a file that is already labelled' },
       },
       required: ['input', 'kind'],
@@ -103,7 +103,7 @@ const TOOLS = [
         name: { type: 'string', enum: EU_ICONS },
         variant: { type: 'string', enum: EU_VARIANTS },
         out: { type: 'string', description: `Optional output path. ${PATH_NOTE}` },
-        height: { type: 'number', description: 'PNG height in px' },
+        height: { type: 'integer', description: 'PNG height in whole px' },
       },
       required: ['name'],
       additionalProperties: false,
@@ -157,7 +157,8 @@ async function handle(msg) {
         instructions:
           'Label AI-generated and human-made content with the official EU icon. Call decide_label first; if it returns required:"unknown", ask the user its question and call it again. ' +
           "Pass decide_label's label (kind, media, lang) unchanged to stamp_image or render_label: stamp_image for image files, render_label with format html for web pages and UI. " +
-          'Alt text = a short description of what the image shows, then the label sentence; pass description so the result has it composed, and never use the label sentence alone as the alt of an informative image. ' +
+          'Alt text = a short description of what the image shows, then the label sentence (disclosure); pass description so the result has it composed as alt. alt is null until you pass description; never publish disclosure as the alt of the image. ' +
+          'render_label also returns labelAlt, the alt of an <img> that shows the label on its own. ' +
           'When the label is a legal duty, also put the sentence in a visible caption. If stamp_image fails with NO_SHARP, show the user the install command from the error.',
       };
     case 'ping':
