@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 (2026-10-17)
+
+- A ready-made "Made by a human" pack in `labels/human-made` for people who label their own work by hand: 58 labels (with text, short English "Human-made", the hand alone, and each with one content-type icon) in English and Polish, light and dark, as SVG and PNG (48 and 128 px). Also attached to the GitHub release as `human-made-labels.zip`. Rebuilt by `node tools/make-human-pack.mjs`; a test fails when the pack and the renderer drift apart.
+- SKILL.md points people who want to place the human-made label themselves to the pack.
+
 ## 0.2.0 (2026-10-17)
 
 Works with any agent, and in one call for agents that generate images.

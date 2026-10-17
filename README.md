@@ -21,8 +21,17 @@ The icons leave the practical questions open. Does this image need a label at al
 - **`stamp`** burns the label into a JPG, PNG, WebP, AVIF or TIFF, so it survives downloads and reshares as the EU guidance asks. You always say which label (`--kind`); stamp never assumes "Generated with AI". The label height follows the image (about 6% of the shorter side and at least 2.5% of the longer side, never below 28 px or above 512 px), its colour is the one that stands out more from the corner it sits in. Those are the file's pixels: for an image shown smaller, such as a post full width on a phone, pass `--display-width 390` and the label stays at least 28 px tall on that screen. For generated and modified labels an IPTC DigitalSourceType tag goes into the XMP; basic and human-made labels get only the project's marker, because the IPTC vocabulary has no term for them.
 - **`render`** draws the same label as SVG, PNG or WebP, with `role="img"`, `lang` and an `aria-label`. With `--format html` it writes the label as real text and inline icons, for web pages and apps.
 - **Content-type icons** show which part was AI: image, text, audio, voice, music, video. A second label, "Made by a human", shows which part was not.
+- **A ready-made "Made by a human" pack** for people who label their own work by hand, no agent needed: SVG and PNG, English and Polish, light and dark, with or without a content-type icon. See below.
 - **`eu`** gives you the twelve official EU files, unchanged.
 - **Languages:** English and Polish wording is built in. For the other 22 official EU languages, pass `--lang` with your own `--text` in that language (`--lang de --text "Mit KI generiert"`), so screen readers read the label with the right voice.
+
+## Label your own work: the "Made by a human" pack
+
+An AI agent should not be the one to call your work human-made. So the human-made labels also come as plain files you place yourself: [`labels/human-made`](labels/human-made) in this repo, or all of them in one ZIP (`human-made-labels.zip`) from the [latest release](https://github.com/JK-G/ai-content-labels/releases/latest).
+
+![The "Made by a human" labels in English and Polish, light and dark](labels/human-made/preview.png)
+
+There are 58 labels: the label with text, a short "Human-made" in English, the hand alone, and each of these with one content-type icon (image, text, audio, voice, music, video). Every label comes as SVG and as PNG at 48 and 128 px on a transparent background. Use them only where no generative AI was involved; the [pack's README](labels/human-made/README.md) has the rules, placement tips and credits.
 
 ## Use it with your agent
 

@@ -1,6 +1,6 @@
 {
   "name": "ai-content-labels",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Label AI-generated and human-made content with the official EU icons, from any AI agent: decide what the AI Act asks for, burn the label into images in one call and get the alt text",
   "author": {
     "name": "JK-G",

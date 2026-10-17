@@ -139,7 +139,7 @@ node scripts/ai-labels.mjs label image.png --realistic --description "what it sh
 | All of it made by AI | `--kind generated` |
 | Real or human-made content changed by AI (a swapped face, added objects, a replaced voice) | `--kind modified` |
 | AI was involved and you want your own wording | `--kind basic --text "Voice generated with AI"` |
-| Made by a person, confirmed by the user | `--kind human --media text,image` |
+| Made by a person, confirmed by the user | `--kind human --media text,image`. If the person wants to place the label by hand, point them to the ready-made files in `labels/human-made` of the repository (or the `human-made-labels.zip` release asset) instead |
 | AI image with a human-written text | `--kind generated --media image --human text` |
 | A human-made layout, mockup or collage containing an AI-generated element | Run decide with `--realistic` for the element. If the post is about the visualisation, crop to the AI element and stamp that; if it shows the whole design, use `--kind modified --media image` with `--description` naming the AI part |
 
