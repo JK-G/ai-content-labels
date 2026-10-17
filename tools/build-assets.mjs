@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Builds the runtime assets under skills/ai-content-labels/assets from the upstream sources:
 //   node tools/build-assets.mjs --inter <Inter-SemiBold.ttf> --eu <dir with the EU SVGs> --lucide <lucide-static icons dir>
-//     [--phosphor <@phosphor-icons/core package dir>]
+//     [--heroicons <heroicons package dir>]
 // The runtime never needs these sources or opentype.js: it reads the JSON this script writes.
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -144,10 +144,10 @@ for (const [key, name] of Object.entries(media)) {
 writeFileSync(join(assets, 'icons', 'media.json'), JSON.stringify(mediaJson, null, 2) + '\n');
 console.log(`media: ${Object.keys(media).join(', ')}`);
 
-// ---------- The hand of the human-made mark: Phosphor "hand-palm", fill weight ----------
+// ---------- The hand of the human-made mark: Heroicons "hand-raised", 24 solid ----------
 
-if (args.phosphor) {
-  const hand = readFileSync(join(args.phosphor, 'assets', 'fill', 'hand-palm-fill.svg'), 'utf8').trim();
-  writeFileSync(join(assets, 'icons', 'hand-mark.svg'), `<!-- From Phosphor "hand-palm", fill weight (MIT), https://phosphoricons.com -->\n${hand}\n`);
-  console.log('hand: Phosphor hand-palm (fill)');
+if (args.heroicons) {
+  const hand = readFileSync(join(args.heroicons, '24', 'solid', 'hand-raised.svg'), 'utf8').trim();
+  writeFileSync(join(assets, 'icons', 'hand-mark.svg'), `<!-- From Heroicons "hand-raised", 24 solid (MIT), https://heroicons.com -->\n${hand}\n`);
+  console.log('hand: Heroicons hand-raised (solid)');
 }

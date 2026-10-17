@@ -4,7 +4,7 @@ Content-type icons and the hand in the human-made mark
 Files: media/*.svg and media.json in this folder, from Lucide 1.59.0 (https://lucide.dev).
 The "music" and "type" (text) icons are derived from Feather and are also under the MIT
 License below, as stated in Lucide's LICENSE. The hand in the human-made mark (hand-mark.svg)
-is Phosphor's "hand-palm" icon, fill weight, under the Phosphor MIT License at the end.
+is Heroicons' "hand-raised" icon (24 solid), under the Heroicons MIT License at the end.
 
 -----------------------------------------------------------------------
 
@@ -50,11 +50,11 @@ SOFTWARE.
 
 -----------------------------------------------------------------------
 
-hand-mark.svg: Phosphor Icons 2.1.1, "hand-palm" (fill), https://phosphoricons.com
+hand-mark.svg: Heroicons 2.2.0, "hand-raised" (24 solid), https://heroicons.com
 
 MIT License
 
-Copyright (c) 2023 Phosphor Icons
+Copyright (c) Tailwind Labs, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -58,14 +58,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## Phosphor
+## Heroicons
 
-File: `skills/ai-content-labels/assets/icons/hand-mark.svg`, the "hand-palm" icon (fill weight) from Phosphor Icons 2.1.1 (https://phosphoricons.com), used for the hand in the human-made mark.
+File: `skills/ai-content-labels/assets/icons/hand-mark.svg`, the "hand-raised" icon (24 solid) from Heroicons 2.2.0 (https://heroicons.com), used for the hand in the human-made mark.
 
 ```
 MIT License
 
-Copyright (c) 2023 Phosphor Icons
+Copyright (c) Tailwind Labs, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

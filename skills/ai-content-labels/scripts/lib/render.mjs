@@ -212,10 +212,11 @@ export function euDisc(x, y, size, variant) {
   );
 }
 
-// The human-made counterpart of the EU disc: the same disc and colours, a filled hand instead of
-// "AI" (Phosphor "hand-palm", fill weight). A solid glyph matches the weight of the bold letters
-// and keeps its silhouette at small sizes, so it is simply scaled.
-export const HAND_RATIO = 0.62;
+// The human-made counterpart of the EU disc: the same disc and colours, a filled raised hand with
+// five fingers instead of "AI" (Heroicons "hand-raised", solid). A solid glyph matches the weight of
+// the bold letters and keeps its silhouette at small sizes, so it is simply scaled. HAND_RATIO is
+// the share of the disc taken by the icon's 24 box; the hand itself is 0.62 of the disc tall.
+export const HAND_RATIO = 0.66;
 
 export function handDisc(x, y, size, variant) {
   const [disc, hand] = EU_COLORS[variant];

@@ -74,7 +74,7 @@ const rule = () => '<span class="ai-label-rule" aria-hidden="true"></span>';
 // The author mark in a 24×24 box: the EU "AI" disc, or the hand in the same disc.
 function mark(kind) {
   if (kind === 'human') {
-    // The same glyph and proportion as the SVG and PNG labels: the filled hand, 0.62 of the disc.
+    // The same glyph and proportion as the SVG and PNG labels: the raised hand, 0.62 of the disc tall.
     const { box, d } = handMark();
     const size = 24 * HAND_RATIO;
     const at = round((24 - size) / 2);

@@ -204,7 +204,7 @@ test('the hand is a filled glyph, centred in its disc at the same proportion at 
     const g = size * HAND_RATIO;
     const at = H * 0.125 + (size - g) / 2;
     assert.ok(svg.includes(`<g transform="translate(${round(at)} ${round(at)}) scale(${round(g / box, 5)})"><path fill="#ffffff" d="${d}"/></g>`), `H=${H}`);
-    assert.doesNotMatch(svg, /NaN|stroke-width="[^"]*"[^>]*d="M216/);
+    assert.doesNotMatch(svg, /NaN|stroke-width="[^"]*"[^>]*d="M10\.5/);
   }
   // The dark theme inverts it like the EU disc: white disc, #1d1d1b hand.
   assert.match(renderLabel({ kind: 'human', minimal: true, theme: 'dark' }).svg, /<circle [^>]*fill="#ffffff"\/><g [^>]*><path fill="#1d1d1b"/);
@@ -216,7 +216,7 @@ test('the skill folder carries the third-party notices, so a plain copy of it do
   assert.match(icons, /ISC License/);
   assert.match(icons, /Copyright \(c\) 2026 Lucide Icons and Contributors/);
   assert.match(icons, /The MIT License \(MIT\)\s+Copyright \(c\) 2013-present Cole Bemis/);
-  assert.match(icons, /hand-mark\.svg[\s\S]*Copyright \(c\) 2023 Phosphor Icons/);
+  assert.match(icons, /hand-mark\.svg[\s\S]*Copyright \(c\) Tailwind Labs, Inc\./);
   const notice = readFileSync(new URL('NOTICE.md', skill), 'utf8');
   for (const f of ['assets/icons/LICENSE.txt', 'assets/font/OFL.txt']) assert.ok(notice.includes(f), f);
 });

@@ -79,8 +79,8 @@ test('narrow columns wrap whole words and move the icons under them', () => {
 
 test('the hand in the HTML mark is the same filled glyph and proportion as the SVG label', () => {
   const { html } = renderHtml({ kind: 'human', media: 'text' });
-  // 0.62 of the 24-unit disc, centred, coloured like the "AI" letters (and Canvas in forced colours).
-  assert.match(html, /<path class="ai-label-glyph" transform="translate\(4\.56 4\.56\) scale\(0\.05813\)" d="M216/);
+  // The icon box at 0.66 of the 24-unit disc, centred, coloured like the "AI" letters (Canvas in forced colours).
+  assert.match(html, /<path class="ai-label-glyph" transform="translate\(4\.08 4\.08\) scale\(0\.66\)" d="M10\.5/);
   assert.doesNotMatch(LABEL_CSS, /ai-label-hand/);
 });
 

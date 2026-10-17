@@ -118,7 +118,7 @@ $ ai-labels render --format html --kind generated --media text
 - In user testing for the EU icons, labels with text were noticed and understood better. When the label is a legal duty, prefer the full form, or keep the minimal one and say the same thing in words in the caption.
 - Without text, "generated" and "modified" look the same. Only the alt text tells them apart.
 
-The minimal form goes down to 20 px; labels with text stop at 24 px, because smaller type is unreadable. The hand is a filled glyph at 0.62 of its disc at every size, in SVG, PNG and HTML alike. Being solid, it matches the weight of the bold "AI" letters, and at the smallest sizes it still reads as a raised hand by its outline.
+The minimal form goes down to 20 px; labels with text stop at 24 px, because smaller type is unreadable. The hand is a filled raised hand with five fingers, 0.62 of its disc tall at every size, in SVG, PNG and HTML alike. Being solid, it matches the weight of the bold "AI" letters, and at the smallest sizes it still reads as a hand by its outline.
 
 ![Minimal AI and human-made labels at 20, 24, 28, 32 and 40 px, at actual size and enlarged four times, in a light and a dark theme](docs/small.png)
 
@@ -153,7 +153,7 @@ The short version is in the [Why](#why) section. The rules behind `decide`, with
 
 - **EU icons:** European Commission, [EU icons for labelling AI-generated content](https://digital-strategy.ec.europa.eu/en/policies/eu-icons-labelling-ai-generated-content). Free to use without attribution. Using them does not mean you signed the Code of Practice. The human-made mark (a hand in the same disc) is this project's own design, not an EU icon.
 - **Content-type icons:** [Lucide](https://lucide.dev), ISC licence; the music and text icons are derived from Feather, MIT licence.
-- **The hand in the human-made mark:** [Phosphor](https://phosphoricons.com) "hand-palm", fill weight, MIT licence. The full notices for both sets ship in the skill folder (`assets/icons/LICENSE.txt`).
+- **The hand in the human-made mark:** [Heroicons](https://heroicons.com) "hand-raised" (solid) by Tailwind Labs, MIT licence. The full notices for both sets ship in the skill folder (`assets/icons/LICENSE.txt`).
 - **Font:** [Inter](https://rsms.me/inter/) by Rasmus Andersson, SIL Open Font License 1.1.
 
 The code is MIT. Details for the third-party files are in [NOTICE.md](NOTICE.md).
