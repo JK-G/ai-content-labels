@@ -23,9 +23,7 @@ export async function render(opts = {}) {
   if (format === 'html') return renderHtmlLabel(opts);
   if (parseBoolean(opts.css, '--css')) throw new UsageError('--css goes with --format html');
   const scale = scaleOf(opts);
-  // A PNG or WebP knows its pixel density; an SVG is hinted for 1x.
-  const raster = opts.out && ['.png', '.webp'].includes(extname(opts.out).toLowerCase());
-  const label = renderLabel({ ...opts, density: raster ? scale : 1 });
+  const label = renderLabel(opts);
   // alt is for the content the label describes (null without a description); labelAlt is the alt of
   // an <img> that shows this label on its own.
   const result = {

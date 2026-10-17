@@ -13,8 +13,8 @@ First public version: images and labels for web pages.
 - Languages: all 24 EU language codes. English and Polish have built-in wording; the others take `--text` (and `--human-text`) and tag the SVG and HTML with that language.
 - Input checks: stray words (an unquoted `--text`) and fractional heights are refused.
 - `--minimal`: no text, only the author mark (EU "AI" disc, or a hand in the same disc) and the content-type icons, down to 20 px. Labels with text are at least 24 px tall.
-- The hand in the human-made mark takes 0.64 of its disc at every size, in SVG, PNG and HTML alike. Below 44 px at 1x it is hinted to the pixel grid so the fingers stay apart; PNGs at `--scale 2` or more are hinted for their own pixel density.
+- The hand in the human-made mark is a filled glyph (Phosphor "hand-palm", MIT) at 0.62 of its disc at every size, in SVG, PNG and HTML alike, so it matches the weight of the bold "AI" letters.
 - `eu`: the official EU icons, unchanged. `icons`: the content-type icons.
 - MCP server (`decide_label`, `render_label`, `stamp_image`, `eu_icon`) with strict arguments and tool annotations, Claude Code plugin and skill.
 - The CLI installs as `ai-labels`, the name the help and `decide` print, and as `ai-content-labels` for `npx`.
-- The skill folder carries its own third-party notices (`NOTICE.md`, the Lucide ISC and Feather MIT texts in `assets/icons/LICENSE.txt`), so a plain copy of it keeps them.
+- The skill folder carries its own third-party notices (`NOTICE.md`, the Lucide ISC, Feather MIT and Phosphor MIT texts in `assets/icons/LICENSE.txt`), so a plain copy of it keeps them.

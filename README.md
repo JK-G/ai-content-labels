@@ -118,7 +118,7 @@ $ ai-labels render --format html --kind generated --media text
 - In user testing for the EU icons, labels with text were noticed and understood better. When the label is a legal duty, prefer the full form, or keep the minimal one and say the same thing in words in the caption.
 - Without text, "generated" and "modified" look the same. Only the alt text tells them apart.
 
-The minimal form goes down to 20 px; labels with text stop at 24 px, because smaller type is unreadable. The hand takes about the same share of its disc at every size, close to the "AI" letters. Below 44 px, at 1x, its lines are snapped to the pixel grid like a hinted font, so the fingers stay apart. It has two costs. Up to 34 px the lines are 1 px wide, so the hand looks a little lighter than the "AI". Below 25 px it is a little larger, because 12 px is the smallest hand whose fingers stay apart. A PNG at `--scale 2` or more is hinted for its own pixels, so it gets the full-weight hand from 22 px up (at `--scale 3`, at every size), and HTML labels draw it scaled.
+The minimal form goes down to 20 px; labels with text stop at 24 px, because smaller type is unreadable. The hand is a filled glyph at 0.62 of its disc at every size, in SVG, PNG and HTML alike. Being solid, it matches the weight of the bold "AI" letters, and at the smallest sizes it still reads as a raised hand by its outline.
 
 ![Minimal AI and human-made labels at 20, 24, 28, 32 and 40 px, at actual size and enlarged four times, in a light and a dark theme](docs/small.png)
 
@@ -152,7 +152,8 @@ The short version is in the [Why](#why) section. The rules behind `decide`, with
 ## Credits and licences
 
 - **EU icons:** European Commission, [EU icons for labelling AI-generated content](https://digital-strategy.ec.europa.eu/en/policies/eu-icons-labelling-ai-generated-content). Free to use without attribution. Using them does not mean you signed the Code of Practice. The human-made mark (a hand in the same disc) is this project's own design, not an EU icon.
-- **Content-type icons and the hand:** [Lucide](https://lucide.dev), ISC licence; the music and text icons are derived from Feather, MIT licence. The full notices ship in the skill folder (`assets/icons/LICENSE.txt`).
+- **Content-type icons:** [Lucide](https://lucide.dev), ISC licence; the music and text icons are derived from Feather, MIT licence.
+- **The hand in the human-made mark:** [Phosphor](https://phosphoricons.com) "hand-palm", fill weight, MIT licence. The full notices for both sets ship in the skill folder (`assets/icons/LICENSE.txt`).
 - **Font:** [Inter](https://rsms.me/inter/) by Rasmus Andersson, SIL Open Font License 1.1.
 
 The code is MIT. Details for the third-party files are in [NOTICE.md](NOTICE.md).

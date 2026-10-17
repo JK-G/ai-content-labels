@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { renderLabel, officialIcon, THEMES, handGeometry, HAND_RATIO } from '../skills/ai-content-labels/scripts/lib/render.mjs';
+import { renderLabel, officialIcon, THEMES, HAND_RATIO } from '../skills/ai-content-labels/scripts/lib/render.mjs';
 import { worstCaseContrast, contrastRatio, WCAG } from '../skills/ai-content-labels/scripts/lib/contrast.mjs';
 import { KINDS, MEDIA, LANGS, sentence } from '../skills/ai-content-labels/scripts/lib/i18n.mjs';
 import { VERSION } from '../skills/ai-content-labels/scripts/lib/version.mjs';
-import { font } from '../skills/ai-content-labels/scripts/lib/assets.mjs';
+import { font, handMark } from '../skills/ai-content-labels/scripts/lib/assets.mjs';
 import { round } from '../skills/ai-content-labels/scripts/lib/text.mjs';
 
 test('every kind renders in every language and theme', () => {
@@ -196,35 +196,18 @@ test('the SVG declares its language', () => {
   assert.match(renderLabel({ lang: 'pl' }).svg, /^<svg [^>]*lang="pl" xml:lang="pl"/);
 });
 
-test('the hand keeps one proportion of its disc at every label height', () => {
+test('the hand is a filled glyph, centred in its disc at the same proportion at every height', () => {
+  const { d, box } = handMark();
   for (let H = 20; H <= 64; H++) {
+    const svg = renderLabel({ kind: 'human', minimal: true, height: H }).svg;
     const size = H * 0.75;
-    for (const density of [1, 2, 3]) {
-      const ratio = handGeometry(H * 0.125, H * 0.125, size, density).size / size;
-      // 0.64 when scaled; 0.58-0.70 when hinted to whole pixels. Under 25 px at 1x the smallest crisp
-      // hand (12 px, fingers 2 px apart) is a little larger, at most 0.8 of the disc.
-      const max = H < 25 && density === 1 ? 0.8 : 0.7;
-      assert.ok(ratio >= 0.58 && ratio <= max, `H=${H} density=${density}: ${ratio.toFixed(3)}`);
-    }
+    const g = size * HAND_RATIO;
+    const at = H * 0.125 + (size - g) / 2;
+    assert.ok(svg.includes(`<g transform="translate(${round(at)} ${round(at)}) scale(${round(g / box, 5)})"><path fill="#ffffff" d="${d}"/></g>`), `H=${H}`);
+    assert.doesNotMatch(svg, /NaN|stroke-width="[^"]*"[^>]*d="M216/);
   }
-  assert.equal(handGeometry(8, 8, 48).size / 48, HAND_RATIO);
-  assert.equal(handGeometry(4, 4, 24, 3).grid, false); // a PNG at --scale 3 has room: simply scaled
-});
-
-test('at 1x the hand is hinted: whole-pixel stroke, finger strokes on the grid, a clear pixel between them', () => {
-  for (let H = 20; H < 44; H++) {
-    const g = handGeometry(H * 0.125, H * 0.125, H * 0.75);
-    assert.ok(g.grid, `H=${H}`);
-    assert.ok(Number.isInteger(g.stroke) && g.stroke >= 1);
-    for (const x of g.stems) assert.equal((x * 2) % 2, g.stroke % 2 ? 1 : 0, `H=${H} stem ${x}`); // centres on .5 for odd strokes
-    for (let i = 1; i < g.stems.length; i++) assert.ok(g.stems[i] - g.stems[i - 1] >= g.stroke + 1, `H=${H} gap`);
-  }
-  // The default 32 px label is no longer the heaviest: 0.6-0.65 of the disc, not 0.75.
-  const g32 = handGeometry(4, 4, 24);
-  assert.ok(g32.size / 24 < 0.66);
-  const svg = renderLabel({ kind: 'human', minimal: true, height: 32 }).svg;
-  assert.match(svg, /stroke-width="1"/);
-  assert.doesNotMatch(svg, /NaN/);
+  // The dark theme inverts it like the EU disc: white disc, #1d1d1b hand.
+  assert.match(renderLabel({ kind: 'human', minimal: true, theme: 'dark' }).svg, /<circle [^>]*fill="#ffffff"\/><g [^>]*><path fill="#1d1d1b"/);
 });
 
 test('the skill folder carries the third-party notices, so a plain copy of it does too', () => {
@@ -233,6 +216,7 @@ test('the skill folder carries the third-party notices, so a plain copy of it do
   assert.match(icons, /ISC License/);
   assert.match(icons, /Copyright \(c\) 2026 Lucide Icons and Contributors/);
   assert.match(icons, /The MIT License \(MIT\)\s+Copyright \(c\) 2013-present Cole Bemis/);
+  assert.match(icons, /hand-mark\.svg[\s\S]*Copyright \(c\) 2023 Phosphor Icons/);
   const notice = readFileSync(new URL('NOTICE.md', skill), 'utf8');
   for (const f of ['assets/icons/LICENSE.txt', 'assets/font/OFL.txt']) assert.ok(notice.includes(f), f);
 });
