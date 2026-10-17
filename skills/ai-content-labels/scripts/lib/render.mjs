@@ -26,8 +26,9 @@ export function normalize(input = {}) {
     media: toList(input.media),
     human: toList(input.human),
     lang: input.lang ?? 'en',
-    text: input.text || undefined,
-    humanText: input.humanText || undefined,
+    // NFC, so "é" typed as e + combining accent (macOS paste) finds its glyph.
+    text: input.text ? String(input.text).normalize('NFC') : undefined,
+    humanText: input.humanText ? String(input.humanText).normalize('NFC') : undefined,
     short: Boolean(input.short),
     uppercase: Boolean(input.uppercase),
     theme: input.theme ?? 'light',
@@ -82,16 +83,20 @@ export function renderLabel(input) {
     })
     .join('');
 
-  const alt = [
-    sentence({ kind: o.kind, media: o.media, text: o.text, lang: o.lang }),
-    ...(o.kind !== 'human' && o.human.length ? [sentence({ kind: 'human', media: o.human, text: o.humanText, lang: o.lang })] : []),
-  ].join(' ');
-
+  const alt = labelSentence(o);
   const W = Math.ceil(width);
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${xml(alt)}">` +
     `<title>${xml(alt)}</title>${body}</svg>`;
   return { svg, width: W, height: H, alt, contrast: round(contrast, 2), options: o };
+}
+
+// The label as one sentence for alt text and aria-label: "Generated with AI: image. Made by a human: text."
+export function labelSentence(o) {
+  return [
+    sentence({ kind: o.kind, media: o.media, text: o.text, lang: o.lang }),
+    ...(o.kind !== 'human' && o.human.length ? [sentence({ kind: 'human', media: o.human, text: o.humanText, lang: o.lang })] : []),
+  ].join(' ');
 }
 
 function pill({ kind, text, media, o, theme }) {

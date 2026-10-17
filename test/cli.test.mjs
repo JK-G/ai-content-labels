@@ -105,7 +105,74 @@ test('MCP server: initialize, list tools, call one', async () => {
   const byId = Object.fromEntries(replies.map((r) => [r.id, r]));
   assert.equal(byId[1].result.serverInfo.name, 'ai-content-labels');
   assert.deepEqual(byId[2].result.tools.map((t) => t.name), ['decide_label', 'render_label', 'stamp_image', 'eu_icon']);
-  assert.equal(JSON.parse(byId[3].result.content[0].text).euIcon, 'modified');
+  assert.equal(JSON.parse(byId[3].result.content[0].text).officialIcon, 'modified');
   assert.equal(byId[4].result.isError, true);
   assert.equal(byId[5].error.code, -32601);
+});
+
+test('mistyped options are refused instead of ignored', () => {
+  const typo = cli('decide', '--media', 'image', '--origin', 'generated', '--realstic', '--json');
+  assert.equal(typo.status, 2);
+  assert.match(typo.stderr, /unknown option for decide: --realstic/);
+  assert.equal(cli('stamp', 'x.jpg', '--positon', 'bottom-right').status, 2);
+  assert.match(cli('render', '--kind', '--media').stderr, /--kind needs a value/);
+});
+
+test('boolean options accept =false', () => {
+  assert.equal(cli('render', '--short=false').stdout, cli('render').stdout);
+  assert.notEqual(cli('render', '--short=true').stdout, cli('render').stdout);
+  assert.equal(cli('render', '--short=maybe').status, 2);
+});
+
+test('alt works for text the font cannot draw', () => {
+  assert.equal(cli('alt', '--kind', 'basic', '--text', 'Згенеровано ШІ ґ').stdout, 'Згенеровано ШІ ґ.\n');
+});
+
+test('stamp keeps EXIF and XMP, fixes the orientation and adds the tag', { skip: !sharp && 'sharp not installed' }, async () => {
+  const input = join(tmp, 'meta.jpg');
+  const rights =
+    '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+    '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:rights><rdf:Alt><rdf:li xml:lang="x-default">(c) Test</rdf:li></rdf:Alt></dc:rights></rdf:Description>' +
+    '</rdf:RDF></x:xmpmeta><?xpacket end="w"?>';
+  await sharp({ create: { width: 1200, height: 800, channels: 3, background: '#cfd8dc' } })
+    .withExif({ IFD0: { Artist: 'Test Artist' } })
+    .withMetadata({ orientation: 6 })
+    .withXmp(rights)
+    .jpeg()
+    .toFile(input);
+  const r = JSON.parse(cli('stamp', input, '--media', 'image', '--json').stdout);
+  const meta = await sharp(r.output).metadata();
+  assert.equal(`${meta.width}x${meta.height}`, '800x1200');
+  assert.ok(!meta.orientation || meta.orientation === 1);
+  assert.match(meta.exif.toString('latin1'), /Test Artist/);
+  const xmp = meta.xmp.toString();
+  assert.match(xmp, /\(c\) Test/);
+  assert.match(xmp, /trainedAlgorithmicMedia/);
+
+  const human = join(tmp, 'meta-human.jpg');
+  cli('stamp', input, '--kind', 'human', '--media', 'image', '--out', human);
+  const hx = (await sharp(human).metadata()).xmp.toString();
+  assert.match(hx, /\(c\) Test/);
+  assert.doesNotMatch(hx, /DigitalSourceType/);
+});
+
+test('stamp refuses an explicit height below 20 px', { skip: !sharp && 'sharp not installed' }, async () => {
+  const input = join(tmp, 'small-label.png');
+  await sharp({ create: { width: 800, height: 600, channels: 3, background: '#fff' } }).png().toFile(input);
+  const r = cli('stamp', input, '--height', '16');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /at least 20 px/);
+});
+
+test('MCP server survives a message that is not an object', async () => {
+  const server = spawn(process.execPath, [join(scripts, 'mcp-server.mjs')]);
+  const replies = [];
+  server.stdout.on('data', (chunk) => replies.push(...String(chunk).trim().split('\n').map((l) => JSON.parse(l))));
+  server.stdin.write('null\n[]\n42\n');
+  server.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'ping' }) + '\n');
+  const deadline = Date.now() + 5000;
+  while (replies.length < 4 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
+  server.kill();
+  assert.equal(replies.filter((r) => r.error?.code === -32600).length, 3);
+  assert.deepEqual(replies.find((r) => r.id === 9)?.result, {});
 });

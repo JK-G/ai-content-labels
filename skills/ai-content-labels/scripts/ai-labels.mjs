@@ -49,44 +49,66 @@ Other
   --json                 machine-readable output
 `;
 
-const BOOLEAN = new Set(['short', 'uppercase', 'json', 'allow-low-contrast', 'realistic', 'creative', 'public-interest', 'editorial-review', 'help']);
+const BOOLEAN = new Set(['short', 'uppercase', 'json', 'allow-low-contrast', 'realistic', 'creative', 'public-interest', 'editorial-review', 'metadata', 'help']);
+const LABEL = ['kind', 'media', 'human', 'lang', 'text', 'human-text', 'short', 'uppercase', 'mark', 'theme', 'height', 'background-opacity', 'allow-low-contrast'];
+// The options each command accepts; anything else is a typo and must not pass silently.
+const OPTIONS = {
+  render: [...LABEL, 'out', 'scale'],
+  stamp: [...LABEL, 'out', 'position', 'metadata'],
+  alt: LABEL,
+  decide: ['media', 'origin', 'realistic', 'creative', 'public-interest', 'editorial-review', 'lang'],
+  eu: ['variant', 'out', 'scale', 'height'],
+  icons: ['out'],
+  doctor: [],
+};
 const camel = (s) => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+
+function parseBoolean(key, value) {
+  if (value === true || /^(true|yes|1)$/i.test(value)) return true;
+  if (/^(false|no|0)$/i.test(value)) return false;
+  throw new UsageError(`--${key} takes no value, or true/false`);
+}
 
 function parseArgs(argv) {
   const positional = [];
   const flags = {};
+  const keys = [];
+  const missing = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-h') {
       flags.help = true;
     } else if (a.startsWith('--')) {
       let [key, value] = a.slice(2).split(/=(.*)/s);
-      if (key.startsWith('no-') && value === undefined) {
-        flags[camel(key.slice(3))] = false;
-        continue;
+      if (key.startsWith('no-') && BOOLEAN.has(key.slice(3)) && value === undefined) {
+        [key, value] = [key.slice(3), false];
+      } else if (BOOLEAN.has(key)) {
+        value = parseBoolean(key, value ?? true);
+      } else if (value === undefined) {
+        if (argv[i + 1] === undefined || argv[i + 1].startsWith('--')) missing.push(key);
+        else value = argv[++i];
       }
-      if (value === undefined) {
-        if (BOOLEAN.has(key)) value = true;
-        else {
-          value = argv[++i];
-          if (value === undefined) throw new UsageError(`--${key} needs a value`);
-        }
-      }
+      keys.push(key);
       flags[camel(key)] = value;
     } else {
       positional.push(a);
     }
   }
-  return { positional, flags };
+  return { positional, flags, keys, missing };
 }
 
 async function main(argv) {
-  const { positional, flags } = parseArgs(argv);
+  const { positional, flags, keys, missing } = parseArgs(argv);
   const [command, ...rest] = positional;
   if (!command || flags.help || command === 'help') {
     process.stdout.write(HELP);
     return 0;
   }
+  const allowed = OPTIONS[command];
+  if (!allowed) throw new UsageError(`unknown command "${command}"; run "ai-labels help"`);
+  const unknown = keys.filter((k) => k !== 'json' && !allowed.includes(k));
+  if (unknown.length) throw new UsageError(`unknown option for ${command}: ${unknown.map((k) => `--${k}`).join(', ')}; run "ai-labels help"`);
+  if (missing.length) throw new UsageError(`--${missing[0]} needs a value`);
   const print = (result, text) => process.stdout.write(flags.json || !text ? JSON.stringify(result, null, 2) + '\n' : text(result));
 
   switch (command) {
@@ -110,7 +132,7 @@ async function main(argv) {
       print(r, (d) =>
         [
           `${d.required ? 'REQUIRED' : 'Not required'}: ${d.basis}`,
-          d.label && `Label: --kind ${d.label.kind} --media ${d.label.media.join(',')}${d.euIcon ? ` (EU icon: ${d.euIcon})` : ''}`,
+          d.label && `Label: --kind ${d.label.kind} --media ${d.label.media.join(',')}${d.officialIcon ? ` (official EU icon with this meaning: ${d.officialIcon})` : ''}`,
           d.altText && `Alt text: ${d.altText}`,
           ...d.placement.map((p) => `- ${p}`),
           ...d.notes.map((n) => `Note: ${n}`),

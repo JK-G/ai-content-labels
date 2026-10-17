@@ -16,12 +16,12 @@ The icons leave the practical questions open. Does this image need a label at al
 
 ## What it does
 
-- **`decide`** goes through the Article 50(4) questions: does the content look real, is it an artistic work, is the text published on a matter of public interest, did a person review it. It returns whether the label is a duty or a voluntary choice, which EU icon fits, where to place it, and the alt text.
+- **`decide`** goes through the Article 50(4) questions: does the content look real, is it an artistic work, is the text published on a matter of public interest, did a person review it. It returns whether the label is a duty or a voluntary choice, which label fits (and the official EU icon with the same meaning), where to place it, and the alt text.
 - **`stamp`** burns the label into a JPG, PNG, WebP, AVIF or TIFF, so it survives downloads and reshares as the EU guidance asks. The label height follows the image (about 4.5% of the shorter side), its colour follows the corner it sits in, and an IPTC DigitalSourceType tag goes into the file's XMP.
 - **`render`** draws the same label as SVG, PNG or WebP for web pages and apps, with `role="img"` and an `aria-label`.
 - **Content-type icons** show which part was AI: image, text, audio, voice, music, video. A second label, "Made by a human", shows which part was not.
 - **`eu`** gives you the twelve official EU files, unchanged.
-- **Languages:** English and Polish wording is built in. Any language written in Latin, Greek or Cyrillic script works with your own `--text`.
+- **Languages:** English and Polish wording is built in. Your own `--text` works in all 24 official EU languages.
 
 ## Install
 
@@ -36,9 +36,11 @@ As a plain skill, without the plugin system:
 
 ```
 git clone https://github.com/JK-G/ai-content-labels
-cd ai-content-labels && npm install --omit=dev
-cp -r skills/ai-content-labels ~/.claude/skills/
+cp -r ai-content-labels/skills/ai-content-labels ~/.claude/skills/
+cd ~/.claude/skills/ai-content-labels && npm install sharp@0.35
 ```
+
+On Windows PowerShell, use `Copy-Item -Recurse ai-content-labels\skills\ai-content-labels $HOME\.claude\skills\` for the copy. The last step adds sharp to the copied skill; you can skip it if you only need SVG labels and `decide`.
 
 From a shell, without cloning:
 
@@ -100,7 +102,7 @@ $ ai-labels render --kind modified --media image,voice --human text --lang pl --
 Article 50(5) asks for disclosures that conform to the applicable accessibility requirements, and the EU icon guidance asks for alt text or ARIA labels. The labels follow WCAG 2.2:
 
 - **Contrast:** the text keeps at least 4.5:1 against its own background even when that background is semi-transparent and the image behind it is pure black or pure white. Options that would break this are refused unless you pass `--allow-low-contrast`.
-- **Screen readers:** every command returns the label as a sentence ("Generated with AI: image and voice."). Text burned into pixels is invisible to assistive technology, so publish that sentence in the `alt`, `aria-label` or caption. Rendered SVGs carry it in `aria-label` and `<title>`.
+- **Screen readers:** `decide`, `render`, `stamp` and `alt` return the label as a sentence ("Generated with AI: image and voice."). Text burned into pixels is invisible to assistive technology, so publish that sentence in the `alt`, `aria-label` or caption. Rendered SVGs carry it in `aria-label` and `<title>`.
 - **Legible everywhere:** the text is drawn as outlines from Inter SemiBold, so it looks the same in every browser and image viewer and covers the alphabets of all 24 official EU languages. Stamped labels are never smaller than 20 px tall; an image too small for that gets an error instead of an unreadable label.
 - **Still:** labels are static. The skill tells agents not to animate them.
 
@@ -117,7 +119,7 @@ A second, unofficial set for tight UI spots where a full label does not fit: a c
 ## Limits
 
 - **Video and audio are not stamped yet.** For video, render a PNG label and overlay it for the whole clip with ffmpeg (the skill shows the command). Labels that follow the timeline, such as a voice icon shown only while an AI voice speaks, are planned. Audio-only content needs a spoken disclaimer; `decide` says so.
-- **Stamping rewrites the file.** The pixels change, so an existing C2PA manifest no longer verifies, and the XMP block is replaced by the DigitalSourceType tag. Sign again after stamping if you rely on C2PA.
+- **Stamping rewrites the file.** The EXIF data, the colour profile and the XMP (rights, credit, captions) are carried over, and the DigitalSourceType is added to the XMP. An older IPTC-IIM block is not carried over. The pixels change, so an existing C2PA manifest no longer verifies: sign again after stamping if you rely on C2PA.
 - **Two built-in languages.** English and Polish. Other languages work with `--text`; built-in wording for more languages is welcome as a pull request to [`i18n.mjs`](skills/ai-content-labels/scripts/lib/i18n.mjs).
 
 ## Roadmap

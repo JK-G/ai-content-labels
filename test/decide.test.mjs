@@ -6,7 +6,7 @@ test('a realistic AI image is a deep fake: label required, generated icon, burne
   const d = decide({ media: 'image', origin: 'generated', realistic: true });
   assert.equal(d.required, true);
   assert.match(d.basis, /Article 50\(4\)/);
-  assert.equal(d.euIcon, 'generated');
+  assert.equal(d.officialIcon, 'generated');
   assert.deepEqual(d.label, { kind: 'generated', media: ['image'] });
   assert.ok(d.placement.some((p) => /stamp/.test(p)));
   assert.equal(d.altText, 'Generated with AI: image.');
@@ -21,7 +21,7 @@ test('a stylised AI illustration needs no label, but gets the same advice', () =
 test('a creative deep fake: required, but a caption is enough', () => {
   const d = decide({ media: 'video', origin: 'modified', realistic: true, creative: true });
   assert.equal(d.required, true);
-  assert.equal(d.euIcon, 'modified');
+  assert.equal(d.officialIcon, 'modified');
   assert.ok(d.notes.some((n) => /does not hamper/.test(n)));
   assert.ok(!d.placement.some((p) => /Burn it/.test(p)));
 });
@@ -42,7 +42,7 @@ test('human-made content: no duty, human label with a warning', () => {
   const d = decide({ media: 'text', origin: 'human', lang: 'pl' });
   assert.equal(d.required, false);
   assert.equal(d.label.kind, 'human');
-  assert.equal(d.euIcon, null);
+  assert.equal(d.officialIcon, null);
   assert.equal(d.altText, 'Stworzone przez człowieka: tekst.');
 });
 

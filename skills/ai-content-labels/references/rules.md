@@ -17,6 +17,11 @@ on Article 50 were still pending at that date and may refine these points.
 - **Article 3(60), deep fake:** AI-generated or manipulated image, audio or video content that
   resembles existing persons, objects, places, entities or events and would falsely appear to a
   person to be authentic or truthful.
+- **Article 50(2)** puts machine-readable marking on providers of generative AI systems, and exempts
+  systems that perform "an assistive function for standard editing" or do not substantially alter
+  the input. Article 50(4) has no such wording for deployers; `decide` treats standard edits
+  (colour, noise, spelling) as not "generated or manipulated" under Article 3(60), which is a
+  reading, not a quoted exception.
 - **Article 50(5).** The information must be given in a clear and distinguishable manner at the
   latest at the time of the first interaction or exposure, and must conform to the applicable
   accessibility requirements.

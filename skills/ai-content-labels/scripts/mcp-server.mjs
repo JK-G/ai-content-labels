@@ -138,6 +138,9 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
   } catch {
     return send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } });
   }
+  if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+    return send({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'invalid request' } });
+  }
   try {
     const result = await handle(msg);
     if (msg.id !== undefined && result !== undefined) send({ jsonrpc: '2.0', id: msg.id, result });

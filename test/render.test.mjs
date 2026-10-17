@@ -96,3 +96,9 @@ test('version matches package.json', () => {
   assert.equal(VERSION, pkg.version);
   assert.equal(VERSION, plugin.version);
 });
+
+test('decomposed (NFD) text is normalised and finds its glyphs', () => {
+  const nfd = 'Café generated with AI';
+  assert.doesNotThrow(() => renderLabel({ kind: 'basic', text: nfd }));
+  assert.equal(renderLabel({ kind: 'basic', text: nfd }).alt, 'Café generated with AI.');
+});

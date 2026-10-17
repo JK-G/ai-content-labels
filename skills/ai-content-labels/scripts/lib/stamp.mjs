@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { extname, join, dirname } from 'node:path';
-import { existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderLabel, POSITIONS } from './render.mjs';
 import { luminance } from './contrast.mjs';
@@ -14,15 +14,22 @@ export async function loadSharp() {
   } catch {
     const skillDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
     const repo = join(skillDir, '..', '..');
-    const where = existsSync(join(repo, 'package.json'))
-      ? `run \`npm install --omit=dev\` in ${repo}`
-      : `run \`npm install sharp\` in ${skillDir}`;
+    const where = isOurRepo(repo) ? `run \`npm install --omit=dev\` in ${repo}` : `run \`npm install sharp@0.35\` in ${skillDir}`;
     const err = new UsageError(
       `stamping and PNG output need the optional dependency "sharp": ${where}, ` +
         'or run through npx: `npx -y github:JK-G/ai-content-labels stamp ...`.'
     );
     err.code = 'NO_SHARP';
     throw err;
+  }
+}
+
+// True when the skill still sits inside a clone of this repository (not copied on its own).
+function isOurRepo(dir) {
+  try {
+    return JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).name === 'ai-content-labels';
+  } catch {
+    return false;
   }
 }
 
@@ -43,24 +50,49 @@ export function digitalSourceXmp(kind) {
   );
 }
 
+// Adds the DigitalSourceType to the XMP packet the file already has, keeping everything else
+// (rights, credit, captions). Without a readable packet, starts a new one.
+export function mergeXmp(existing, kind) {
+  const type = DIGITAL_SOURCE[kind];
+  if (!existing) return digitalSourceXmp(kind);
+  const element = /<Iptc4xmpExt:DigitalSourceType>[^<]*<\/Iptc4xmpExt:DigitalSourceType>/;
+  const attribute = /Iptc4xmpExt:DigitalSourceType="[^"]*"/;
+  if (element.test(existing)) return existing.replace(element, `<Iptc4xmpExt:DigitalSourceType>${type}</Iptc4xmpExt:DigitalSourceType>`);
+  if (attribute.test(existing)) return existing.replace(attribute, `Iptc4xmpExt:DigitalSourceType="${type}"`);
+  const close = existing.lastIndexOf('</rdf:RDF>');
+  if (close < 0) return digitalSourceXmp(kind);
+  return (
+    existing.slice(0, close) +
+    '<rdf:Description rdf:about="" xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/">' +
+    `<Iptc4xmpExt:DigitalSourceType>${type}</Iptc4xmpExt:DigitalSourceType></rdf:Description>` +
+    existing.slice(close)
+  );
+}
+
+export const MIN_HEIGHT = 20;
+
 // Label height for an image: about 4.5% of the shorter side, never below 28 px.
-export const autoHeight = (w, h) => Math.max(28, Math.min(160, Math.round(Math.min(w, h) * 0.045)));
+export const autoHeight = (w, h) => Math.max(28, Math.round(Math.min(w, h) * 0.045));
 
 export async function stampImage(input, output, opts = {}) {
   const sharp = await loadSharp();
   const position = opts.position ?? 'top-left';
   if (!POSITIONS.includes(position)) throw new UsageError(`position must be one of: ${POSITIONS.join(', ')}`);
+  if (opts.height != null && !(Number(opts.height) >= MIN_HEIGHT)) {
+    throw new UsageError(`a stamped label must be at least ${MIN_HEIGHT} px tall to stay legible`);
+  }
 
   // Pixels after EXIF rotation, for the size and for picking the theme.
   const { data, info } = await sharp(input).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width: W, height: H } = info;
+  const existingXmp = (await sharp(input).metadata()).xmp?.toString('utf8').replace(/\0+$/, '');
 
   let height = opts.height ? Number(opts.height) : autoHeight(W, H);
   let label = renderLabel({ ...opts, height, theme: opts.theme === 'auto' || !opts.theme ? 'light' : opts.theme });
   // Shrink the label when it is wider than the image allows.
   const fits = (l) => l.width + l.height <= W && l.height * 2 <= H;
-  while (!fits(label) && height > 20) {
-    height = Math.max(20, Math.floor(height * 0.9));
+  while (!fits(label) && height > MIN_HEIGHT) {
+    height = Math.max(MIN_HEIGHT, Math.floor(height * 0.9));
     label = renderLabel({ ...opts, height, theme: label.options.theme });
   }
   if (!fits(label)) throw new UsageError(`the image (${W}×${H}) is too small for a legible label`);
@@ -77,8 +109,10 @@ export async function stampImage(input, output, opts = {}) {
   }
 
   const format = formatFor(output);
-  let pipeline = sharp(input).rotate().composite([{ input: Buffer.from(label.svg), left, top }]).keepIccProfile();
-  const xmp = opts.metadata === false ? null : digitalSourceXmp(label.options.kind);
+  // Keep the input's EXIF, ICC profile and XMP; add the DigitalSourceType for AI labels.
+  let pipeline = sharp(input).rotate().composite([{ input: Buffer.from(label.svg), left, top }]).keepIccProfile().keepExif();
+  const tag = opts.metadata !== false && DIGITAL_SOURCE[label.options.kind];
+  const xmp = tag ? mergeXmp(existingXmp, label.options.kind) : existingXmp;
   if (xmp) pipeline = pipeline.withXmp(xmp);
   pipeline = format.apply(pipeline);
   await pipeline.toFile(output);
@@ -89,7 +123,7 @@ export async function stampImage(input, output, opts = {}) {
     label: { left, top, width: label.width, height: label.height, theme, position },
     alt: label.alt,
     contrast: label.contrast,
-    metadata: xmp ? `XMP DigitalSourceType ${DIGITAL_SOURCE[label.options.kind].split('/').pop()}` : null,
+    metadata: tag ? `XMP DigitalSourceType ${tag.split('/').pop()}` : null,
   };
 }
 

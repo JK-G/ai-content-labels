@@ -31,7 +31,7 @@ export function decide(input = {}) {
     required: false,
     basis: '',
     label: null,
-    euIcon: null,
+    officialIcon: null,
     placement: [],
     accessibility: [],
     notes: [],
@@ -41,7 +41,7 @@ export function decide(input = {}) {
 
   if (origin === 'human') {
     out.basis = 'No duty: the AI Act does not regulate human-made content.';
-    out.label = { kind: 'human', media: [mediaKey(media)] };
+    out.label = { kind: 'human', media: [media] };
     out.notes.push(
       'A "human-made" label is a claim to your audience. Use it only when no generative AI produced or changed this part; AI spell-check or noise reduction is a judgement call, so say so if in doubt.',
       'The human-made label must not look like the EU AI icon.'
@@ -50,15 +50,19 @@ export function decide(input = {}) {
   }
 
   if (origin === 'assisted') {
-    out.basis = 'No duty: AI was used only for standard editing (for example colour correction, noise reduction or spelling) that does not substantially change the content.';
-    out.label = { kind: 'basic', media: [mediaKey(media)] };
+    out.basis =
+      'No duty, on this reading: content that AI touched only with standard edits (colour correction, noise reduction, spelling) is not "generated or manipulated" in the sense of the deep fake definition (Article 3(60)), as long as the edit does not change what it shows or says. Article 50(2) has an explicit exception of this kind for providers ("an assistive function for standard editing").';
+    out.label = { kind: 'basic', media: [media] };
     out.notes.push('A label is optional here. If the edit changes what the content shows or says, treat it as "modified" instead.');
     return finish(out, lang);
   }
 
   const kind = origin; // generated | modified
-  out.label = { kind, media: [mediaKey(media)] };
-  out.euIcon = kind;
+  out.label = { kind, media: [media] };
+  out.officialIcon = kind;
+  out.notes.push(
+    `Labels from render and stamp use the basic EU icon with this text, which the EU guidance allows. The official icon with the same meaning, in English only, is available unchanged: "eu ${kind}".`
+  );
 
   if (media === 'text') {
     if (publicInterest && !editorialReview) {
@@ -125,4 +129,3 @@ function finish(out, lang) {
   return out;
 }
 
-const mediaKey = (m) => (m === 'audio' ? 'audio' : m);

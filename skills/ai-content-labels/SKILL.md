@@ -13,8 +13,9 @@ node "${CLAUDE_SKILL_DIR}/scripts/ai-labels.mjs" <command> [options]
 
 If the plugin's MCP server is connected, the tools `decide_label`, `render_label`, `stamp_image` and
 `eu_icon` do the same. `help` lists every option. Stamping and PNG output need `sharp`. When `doctor`
-reports it missing, run `npm install --omit=dev` in the repository folder (two levels above this
-file), or call the CLI through `npx -y github:JK-G/ai-content-labels <command>`.
+reports it missing, run the install command it prints (it knows whether this skill sits in a clone of
+the repository or was copied on its own), or call the CLI through
+`npx -y github:JK-G/ai-content-labels <command>`.
 
 ## Workflow
 
@@ -30,12 +31,13 @@ file), or call the CLI through `npx -y github:JK-G/ai-content-labels <command>`.
 
    Ask only for what you cannot infer, in one short question.
 2. **Decide:** `decide --media image --origin generated --realistic --lang pl`. It says whether the
-   label is a legal duty or a voluntary one, which label and EU icon to use, where to put it, and the
-   alt text.
+   label is a legal duty or a voluntary one, which label to use (and the official EU icon with the
+   same meaning), where to put it, and the alt text.
 3. **Make the label:**
    - Image file: `stamp photo.jpg --kind generated --media image --lang pl`. Writes
-     `photo.ai-label.jpg` with the label in the pixels and an IPTC DigitalSourceType XMP tag. The
-     size and colour adapt to the image; `--position` picks the corner (default top-left).
+     `photo.ai-label.jpg` with the label in the pixels, keeps the EXIF and XMP of the original and
+     adds an IPTC DigitalSourceType to the XMP. The size and colour adapt to the image;
+     `--position` picks the corner (default top-left).
    - Web page or app: `render --kind generated --media image --out label.svg`, or inline the SVG
      the command prints. The SVG carries `role="img"` and an `aria-label`.
    - Video, for now: render a PNG (`render ... --out label.png --height <about 4.5% of the shorter

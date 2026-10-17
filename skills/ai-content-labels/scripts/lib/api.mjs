@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, extname, join, basename } from 'node:path';
-import { renderLabel, officialIcon } from './render.mjs';
+import { renderLabel, officialIcon, normalize, labelSentence } from './render.mjs';
 import { stampImage, loadSharp } from './stamp.mjs';
 import { decide } from './decide.mjs';
 import { UsageError } from './i18n.mjs';
@@ -34,8 +34,7 @@ export function decideLabel(opts) {
 }
 
 export function alt(opts) {
-  const label = renderLabel(opts);
-  return { alt: label.alt };
+  return { alt: labelSentence(normalize(opts)) };
 }
 
 export async function eu(name, opts = {}) {
