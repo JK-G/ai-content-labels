@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync, spawn } from 'node:child_process';
 import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -40,7 +40,7 @@ test('decide prints a verdict and JSON', () => {
   const r = cli('decide', '--media', 'image', '--origin', 'generated', '--realistic');
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^REQUIRED: Article 50\(4\)/);
-  const j = JSON.parse(cli('decide', '--media', 'text', '--origin', 'generated', '--json').stdout);
+  const j = JSON.parse(cli('decide', '--media', 'text', '--origin', 'generated', '--no-public-interest', '--json').stdout);
   assert.equal(j.required, false);
 });
 
@@ -64,7 +64,8 @@ test('stamp burns the label in, tags the file and returns alt text', { skip: !sh
   assert.ok(existsSync(result.output));
   assert.equal(result.alt, 'Generated with AI: image.');
   assert.equal(result.label.theme, 'dark'); // light image, dark label
-  assert.equal(result.label.height, Math.round(800 * 0.045));
+  assert.equal(result.label.height, 48); // 6% of the shorter side
+  assert.equal(result.disclosure, 'Generated with AI: image.');
   const meta = await sharp(result.output).metadata();
   assert.match(meta.xmp.toString(), /trainedAlgorithmicMedia/);
   // The label background (left of the EU disc) is dark on this light image.
@@ -156,12 +157,12 @@ test('stamp keeps EXIF and XMP, fixes the orientation and adds the tag', { skip:
   assert.doesNotMatch(hx, /DigitalSourceType/);
 });
 
-test('stamp refuses an explicit height below 20 px', { skip: !sharp && 'sharp not installed' }, async () => {
+test('stamp refuses an explicit height below 24 px for a label with text', { skip: !sharp && 'sharp not installed' }, async () => {
   const input = join(tmp, 'small-label.png');
   await sharp({ create: { width: 800, height: 600, channels: 3, background: '#fff' } }).png().toFile(input);
   const r = cli('stamp', input, '--height', '16');
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /at least 20 px/);
+  assert.match(r.stderr, /at least 24 px/);
 });
 
 test('MCP server survives a message that is not an object', async () => {
@@ -175,4 +176,69 @@ test('MCP server survives a message that is not an object', async () => {
   server.kill();
   assert.equal(replies.filter((r) => r.error?.code === -32600).length, 3);
   assert.deepEqual(replies.find((r) => r.id === 9)?.result, {});
+});
+
+test('decide asks instead of guessing, and exits with 2', () => {
+  const unknown = cli('decide', '--media', 'image', '--origin', 'generated');
+  assert.equal(unknown.status, 2);
+  assert.match(unknown.stdout, /^UNKNOWN: /m);
+  assert.doesNotMatch(unknown.stdout, /Not required/i);
+  const bare = cli('decide');
+  assert.equal(bare.status, 2);
+  assert.match(bare.stderr, /needs --media and --origin/);
+  assert.match(cli('decide', '--media', 'image', '--origin', 'generated', '--no-realistic').stdout, /^NOT REQUIRED: /);
+  assert.match(cli('decide', '--media', 'image', '--origin', 'generated', '--realistic').stdout, /^REQUIRED: /);
+  assert.match(cli('decide', '--media', 'image', '--origin', 'generated', '--realistic', '--lang', 'pl').stdout, /^Label: .*--lang pl/m);
+  const text = cli('decide', '--media', 'text', '--origin', 'generated');
+  assert.equal(text.status, 2);
+  assert.match(text.stdout, /^UNKNOWN: /);
+  assert.match(cli('decide', '--media', 'text', '--origin', 'generated', '--no-public-interest').stdout, /^NOT REQUIRED: /);
+  const json = JSON.parse(cli('decide', '--media', 'image', '--origin', 'generated', '--realistic', '--json').stdout);
+  assert.ok(json.sources.guidelines);
+  assert.ok(json.notes.some((n) => n.startsWith('The duty falls on the deployer')));
+});
+
+test('alt composes the description and the label sentence', () => {
+  assert.equal(cli('alt', '--kind', 'basic', '--text', 'Made with AI.').stdout, 'Made with AI.\n');
+  assert.equal(
+    cli('alt', '--kind', 'generated', '--media', 'image', '--description', 'Grey wolf head, digital painting.').stdout,
+    'Grey wolf head, digital painting. Generated with AI: image.\n'
+  );
+  assert.equal(JSON.parse(cli('eu', 'generated', '--json').stdout).alt, 'Generated with AI.');
+});
+
+test('render validates text, scale and format, and reports the pixel size', { skip: !sharp && 'sharp not installed' }, () => {
+  const blank = cli('render', '--text', '   ');
+  assert.equal(blank.status, 2);
+  assert.match(blank.stderr, /--text is empty/);
+  assert.equal(cli('render', '--scale', '0').status, 2);
+  assert.equal(cli('render', '--scale', 'abc').status, 2);
+  const png = cli('render', '--media', 'image', '--out', join(tmp, 'scaled.png'), '--scale', '3');
+  assert.equal(png.status, 0, png.stderr);
+  assert.match(png.stdout, /\(573×96 px, displays at 191×32\)/);
+  assert.match(png.stdout, /^disclosure: Generated with AI: image\.$/m);
+  assert.equal(cli('render', '--format', 'html', '--out', join(tmp, 'x.png')).status, 2);
+  const tooSmall = cli('render', '--height', '20');
+  assert.equal(tooSmall.status, 2);
+  assert.match(tooSmall.stderr, /--minimal/);
+  assert.equal(cli('render', '--minimal', '--height', '20').status, 0);
+});
+
+test('stamp takes one image; its JSON has an absolute path and the composed alt', { skip: !sharp && 'sharp not installed' }, async () => {
+  const many = cli('stamp', 'a.png', 'b.png');
+  assert.equal(many.status, 2);
+  assert.match(many.stderr, /takes one image/);
+  const input = join(tmp, 'wolf.png');
+  await sharp({ create: { width: 900, height: 900, channels: 3, background: '#1b2330' } }).png().toFile(input);
+  const r = JSON.parse(cli('stamp', input, '--media', 'image', '--description', 'Grey wolf head', '--json').stdout);
+  assert.equal(r.alt, 'Grey wolf head. Generated with AI: image.');
+  assert.equal(r.disclosure, 'Generated with AI: image.');
+  assert.equal(r.label.theme, 'light');
+  assert.ok(isAbsolute(r.output));
+  const again = cli('stamp', r.output, '--media', 'image');
+  assert.equal(again.status, 2);
+  assert.match(again.stderr, /already labelled/);
+  const overlap = cli('stamp', input, '--media', 'image,text', '--human', 'text', '--out', join(tmp, 'o.png'));
+  assert.equal(overlap.status, 2);
+  assert.match(overlap.stderr, /text is in both/);
 });

@@ -1,6 +1,6 @@
 ---
 name: ai-content-labels
-description: Label content as AI-generated, AI-modified or human-made with the official EU icons, and work out what Article 50 of the EU AI Act asks for. Use when the user asks to label, mark, tag, badge or disclose AI content or human-made content, in any wording or language (AI label, AI badge, "generated with AI" watermark, made by a human, AI Act labelling, Article 50 disclosure; Polish - oznacz jako AI, plakietka AI, oznaczenie treści AI, znak AI Act, stworzone przez człowieka), when they ask whether something must be labelled under the AI Act, and when an image, video, audio or text made or edited with AI is about to be published in a project that labels AI content. Burns the label into images, draws SVG or PNG labels for pages and UI, and returns the alt text to publish with the content.
+description: Label content as AI-generated, AI-modified or human-made with the official EU icons, and work out what Article 50 of the EU AI Act asks for. Use when the user asks to label, mark, tag, badge or disclose AI content or human-made content, in any wording or language (AI label, AI badge, "generated with AI" watermark, made by a human, AI Act labelling, Article 50 disclosure; Polish - oznacz jako AI, plakietka AI, oznaczenie treści AI, znak AI Act, stworzone przez człowieka), when they ask whether something must be labelled under the AI Act, and when an image, video, audio or text made or edited with AI is about to be published in a project that labels AI content. Burns the label into images, draws HTML, SVG or PNG labels for pages and UI, and returns the alt text to publish with the content.
 ---
 
 # ai-content-labels
@@ -22,32 +22,51 @@ the repository or was copied on its own), or call the CLI through
 1. **Get the facts, mostly from context.** You need the media type (image, video, audio, text) and the
    origin: `generated` (all AI, apart from the prompt), `modified` (real or human-made content partly
    changed by AI), `assisted` (only standard edits such as colour or noise) or `human`. Then:
-   - `--realistic`: does it look like a real person, object, place or event, so it could pass as
-     authentic? This decides most cases. A photorealistic product shot or a place that does not
-     exist counts, not only people.
-   - `--creative`: an evidently artistic, satirical or fictional work.
+   - `--realistic` or `--no-realistic`: would its audience take it for a genuine photo, recording
+     or event? A person, product or place that does not exist but plausibly could counts;
+     photorealism alone does not decide it. This decides most cases.
+   - `--creative`: an evidently artistic, satirical or fictional work, obvious to its audience.
+     Read strictly: news or a product shot does not count, and an advertisement only in specific
+     cases.
    - Text only: `--public-interest` (published to inform the public on matters of public interest)
-     and `--editorial-review` (a person reviewed it and someone holds editorial responsibility).
+     and `--editorial-review` (a person with relevant knowledge checked the substance, at least
+     fact-checked it; a spell-check or quick approval does not count; no AI changes after sign-off;
+     and a named person or company holds editorial responsibility).
 
-   Ask only for what you cannot infer, in one short question.
+   Ask only for what you cannot infer, in one short question. If `decide` answers `UNKNOWN`
+   (`required: "unknown"` over MCP), ask the user that one question; never guess it. If the user is
+   clearly acting privately, say the duty does not apply to them and offer the label as voluntary.
 2. **Decide:** `decide --media image --origin generated --realistic --lang pl`. It says whether the
    label is a legal duty or a voluntary one, which label to use (and the official EU icon with the
-   same meaning), where to put it, and the alt text.
+   same meaning), where to put it, and the label sentence. Pass its label (kind, media, lang)
+   unchanged to the next step.
 3. **Make the label:**
-   - Image file: `stamp photo.jpg --kind generated --media image --lang pl`. Writes
-     `photo.ai-label.jpg` with the label in the pixels, keeps the EXIF and XMP of the original and
-     adds an IPTC DigitalSourceType to the XMP. The size and colour adapt to the image;
-     `--position` picks the corner (default top-left).
-   - Web page or app: `render --kind generated --media image --out label.svg`, or inline the SVG
-     the command prints. The SVG carries `role="img"` and an `aria-label`.
-   - Video, for now: render a PNG (`render ... --out label.png --height <about 4.5% of the shorter
+   - Image file: `stamp photo.jpg --kind generated --media image --lang pl --description "..."`.
+     Writes `photo.ai-label.jpg` with the label in the pixels, keeps the EXIF and XMP of the
+     original and adds an IPTC DigitalSourceType to the XMP. The size and colour adapt to the image;
+     `--position` picks the corner (default top-left). It stamps one file per run and refuses to
+     overwrite or to stamp a labelled file again unless you pass `--force`.
+   - Web page or app: use `render --format html` (real text: zooms, reflows, translates, follows
+     dark mode) and put the CSS from `render --format html --css` on the page once. Use SVG or PNG
+     (`render ... --out label.svg`) for images, video overlays and places that only accept an
+     image.
+   - Video, for now: render a PNG (`render ... --out label.png --height <about 6% of the shorter
      side>`) and overlay it for the whole video, away from the player controls:
      `ffmpeg -i in.mp4 -i label.png -filter_complex "overlay=24:24" -c:a copy out.mp4`.
      Labels that change with the timeline are not built yet.
    - Audio: put the visual label on the player, cover or page, and tell the user to add a short
      spoken disclaimer at the start. Audio alone cannot carry a visual label.
-4. **Publish the alt text** that `decide`, `render` or `stamp` returns with the content: in `alt`,
-   `aria-label` or the caption. Text burned into pixels is invisible to screen readers.
+4. **Publish the alt text and the label sentence** with the content. Alt text = a short description
+   of what the image shows, then the label sentence, e.g.
+   `alt="Grey wolf head, front view, digital painting. Generated with AI: image."` Pass
+   `--description` so `stamp` and `render` return it composed. Never use the label sentence alone
+   as the alt of an informative image. When the label is a legal duty, also put the sentence in a
+   visible caption. Text burned into pixels is invisible to screen readers. For a separate label
+   on a page:
+   - inline SVG works as is (it carries `role="img"`, `lang` and an `aria-label`);
+   - as `<img src="label.svg">`, give the img its own alt with the label sentence;
+   - when the content's alt or caption already carries the sentence, give the separate label
+     `alt=""` or `aria-hidden="true"`, so screen readers do not hear it twice.
 5. **Report back** in a few lines: what you labelled and where the files are, whether the label is
    required or voluntary and on what basis, and anything you assumed.
 
@@ -60,16 +79,20 @@ the repository or was copied on its own), or call the CLI through
 | AI was involved and you want your own wording | `--kind basic --text "Voice generated with AI"` |
 | Made by a person, confirmed by the user | `--kind human --media text,image` |
 | AI image with a human-written text | `--kind generated --media image --human text` |
+| A human-made layout, mockup or collage containing an AI-generated element | `--kind modified --media image`, or stamp only the AI element where it appears; run decide with `--realistic` for the element |
 
 - `--media` lists only the parts that are AI (or, with `--kind human`, the parts made by a person).
+  A type cannot be in both `--media` and `--human`.
 - Match the language of the content: `--lang pl` for Polish. Only `en` and `pl` are built in; for
   another language pass `--text` in that language (plain words, no abbreviation other than "AI").
 - `--short` gives the compact wording ("Generated"), useful for two labels side by side.
 - `--minimal` drops the text: the author mark (EU "AI" disc, or a hand in the same disc) plus the content-type icons.
   Use it only when the user asks for it or the spot is too small for text (thumbnails, avatars, UI
-  chips). When `decide` says the label is required, keep the full form, or use the minimal one and
-  put the label sentence in a visible caption. Without text, "generated" and "modified" look the
-  same, so the alt text must carry the difference.
+  chips; labels with text need at least 24 px, minimal ones 20 px). When `decide` says the label
+  is required, keep the full form, or use the minimal one and put the label sentence in a visible
+  caption. Without text, "generated" and "modified" look the same, so the alt text must carry the
+  difference.
+- The hand mark is this project's design, not an EU icon. It has no meaning under the AI Act.
 - The untouched EU files: `eu generated --variant black --out ai-generated.svg` (also `basic`,
   `modified`; variants `black`, `white`, `black-transparent`, `white-transparent`).
 

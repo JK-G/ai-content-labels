@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { renderLabel, officialIcon, THEMES } from '../skills/ai-content-labels/scripts/lib/render.mjs';
 import { worstCaseContrast, contrastRatio, WCAG } from '../skills/ai-content-labels/scripts/lib/contrast.mjs';
-import { KINDS, MEDIA, LANGS } from '../skills/ai-content-labels/scripts/lib/i18n.mjs';
+import { KINDS, MEDIA, LANGS, sentence } from '../skills/ai-content-labels/scripts/lib/i18n.mjs';
 import { VERSION } from '../skills/ai-content-labels/scripts/lib/version.mjs';
 
 test('every kind renders in every language and theme', () => {
@@ -110,4 +110,48 @@ test('decomposed (NFD) text is normalised and finds its glyphs', () => {
   const nfd = 'Café generated with AI';
   assert.doesNotThrow(() => renderLabel({ kind: 'basic', text: nfd }));
   assert.equal(renderLabel({ kind: 'basic', text: nfd }).alt, 'Café generated with AI.');
+});
+
+test('sentence drops the custom text\'s own full stop', () => {
+  assert.equal(sentence({ kind: 'basic', text: 'Made with AI.', lang: 'en' }), 'Made with AI.');
+  assert.equal(sentence({ kind: 'basic', text: 'Made with AI!  ', media: ['image'], lang: 'en' }), 'Made with AI: image.');
+});
+
+test('alt text = description, then the label sentence; disclosure is the sentence alone', () => {
+  const l = renderLabel({ media: 'image', description: 'Grey wolf head, digital painting.' });
+  assert.equal(l.alt, 'Grey wolf head, digital painting. Generated with AI: image.');
+  assert.equal(l.disclosure, 'Generated with AI: image.');
+  assert.match(l.svg, /aria-label="Generated with AI: image\."/);
+  assert.equal(renderLabel({ media: 'image', description: '   ' }).alt, 'Generated with AI: image.');
+});
+
+test('empty, duplicated and contradictory input is refused or cleaned', () => {
+  assert.throws(() => renderLabel({ text: '   ' }), /--text is empty/);
+  assert.throws(() => renderLabel({ media: 'image', human: 'text', humanText: '' }), /--human-text is empty/);
+  assert.equal(renderLabel({ media: 'image,image' }).alt, 'Generated with AI: image.');
+  assert.throws(() => renderLabel({ media: 'image,text', human: 'text' }), /text is in both --media and --human/);
+  assert.throws(() => renderLabel({ short: 'maybe' }), /true or false/);
+  assert.equal(renderLabel({ short: 'false' }).width, renderLabel({}).width);
+});
+
+test('labels with text are at least 24 px; minimal ones at least 20', () => {
+  assert.throws(() => renderLabel({ height: 20 }), /at least 24 px tall.*--minimal/);
+  assert.doesNotThrow(() => renderLabel({ height: 24 }));
+  assert.doesNotThrow(() => renderLabel({ height: 20, minimal: true, media: 'image', human: 'text' }));
+  assert.throws(() => renderLabel({ height: 19, minimal: true }), /between 20 and 512/);
+});
+
+test('whole-pixel geometry: root width, pill edge and a half-pixel divider', () => {
+  const { svg, width } = renderLabel({ media: 'image' });
+  assert.ok(Number.isInteger(width));
+  const rect = svg.match(/<rect x="([\d.]+)" y="[\d.]+" width="([\d.]+)"[^>]*stroke-width="([\d.]+)"/);
+  assert.equal(Number(rect[2]) + Number(rect[3]), width);
+  const line = svg.match(/<line x1="([\d.]+)"/);
+  assert.equal(Number(line[1]) % 1, 0.5);
+  for (const h of [20, 24, 28, 32, 40, 48]) assert.ok(Number.isInteger(renderLabel({ media: 'image', human: 'text', minimal: true, height: h }).width));
+});
+
+test('the SVG declares its language', () => {
+  assert.match(renderLabel({}).svg, /^<svg [^>]*lang="en" xml:lang="en"/);
+  assert.match(renderLabel({ lang: 'pl' }).svg, /^<svg [^>]*lang="pl" xml:lang="pl"/);
 });

@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/JK-G/ai-content-labels/actions/workflows/test.yml/badge.svg)](https://github.com/JK-G/ai-content-labels/actions/workflows/test.yml)
 
-Labels for AI-generated and human-made content, built on the official EU icons. ai-content-labels tells you whether the EU AI Act requires a label, draws one that keeps WCAG contrast on any background, burns it into images and hands you the alt text. It ships as a CLI, an MCP server and a skill for Claude Code and other agents.
+Labels for AI-generated and human-made content, built on the official EU icons. ai-content-labels tells you whether the EU AI Act requires a label and draws one that keeps WCAG contrast on any background. It burns the label into images, writes it as HTML for web pages and hands you the alt text. It ships as a CLI, an MCP server and a skill for Claude Code and other agents.
 
 ![Labels in a light and a dark theme: "Generated with AI" with an image icon, "Modified with AI" with image and voice icons, a custom "Voice generated with AI", an AI label next to a "Human-made" label, a Polish label and an upper-case label](docs/labels.png)
 
@@ -10,15 +10,15 @@ Unofficial. Not affiliated with the European Commission, and not legal advice.
 
 ## Why
 
-Article 50(4) of the AI Act applies from 2 August 2026. Deep fakes, and AI-generated text published to inform the public on matters of public interest, must be disclosed. On 10 June 2026 the Commission published three icons for this, free for anyone to use. In the Commission's words, "the use of these EU icons is optional, but the labelling requirements under Article 50 AI Act are not."
+Article 50(4) of the AI Act applies from 2 August 2026. Deep fakes, and AI-generated text published to inform the public on matters of public interest, must be disclosed by the professional user of the AI system (the deployer). On 10 June 2026 the Commission published three icons for this, free for anyone to use. In the Commission's words, "the use of these EU icons is optional, but the labelling requirements under Article 50 AI Act are not."
 
 The icons leave the practical questions open. Does this image need a label at all? Which of the three icons? Where does it go, how big, and what does a screen reader hear? How do you show that only the voice was AI and the script was written by a person? This project answers those questions in code, so a person or an agent gets the same answer every time.
 
 ## What it does
 
-- **`decide`** goes through the Article 50(4) questions: does the content look real, is it an artistic work, is the text published on a matter of public interest, did a person review it. It returns whether the label is a duty or a voluntary choice, which label fits (and the official EU icon with the same meaning), where to place it, and the alt text.
-- **`stamp`** burns the label into a JPG, PNG, WebP, AVIF or TIFF, so it survives downloads and reshares as the EU guidance asks. The label height follows the image (about 4.5% of the shorter side), its colour follows the corner it sits in, and an IPTC DigitalSourceType tag goes into the file's XMP.
-- **`render`** draws the same label as SVG, PNG or WebP for web pages and apps, with `role="img"` and an `aria-label`.
+- **`decide`** goes through the Article 50(4) questions: would the audience take the content for real, is it an artistic work, is the text published on a matter of public interest, did a person review it. It returns whether the label is a duty or a voluntary choice, which label fits (and the official EU icon with the same meaning), where to place it, and the label sentence. When a deciding fact is missing, it asks one question instead of guessing.
+- **`stamp`** burns the label into a JPG, PNG, WebP, AVIF or TIFF, so it survives downloads and reshares as the EU guidance asks. The label height follows the image (about 6% of the shorter side and at least 2.5% of the longer side, never below 28 px or above 512 px), its colour is the one that stands out more from the corner it sits in, and an IPTC DigitalSourceType tag goes into the file's XMP.
+- **`render`** draws the same label as SVG, PNG or WebP, with `role="img"`, `lang` and an `aria-label`. With `--format html` it writes the label as real text and inline icons, for web pages and apps.
 - **Content-type icons** show which part was AI: image, text, audio, voice, music, video. A second label, "Made by a human", shows which part was not.
 - **`eu`** gives you the twelve official EU files, unchanged.
 - **Languages:** English and Polish wording is built in. Your own `--text` works in all 24 official EU languages.
@@ -70,21 +70,26 @@ In Claude Code, ask in your own words: "label this image as AI-generated", "does
 From the command line (`ai-labels` below stands for `node skills/ai-content-labels/scripts/ai-labels.mjs`):
 
 ```
+$ ai-labels decide --media image --origin generated
+UNKNOWN: Would the people who will see it take it for a genuine photo, recording or event? Rerun with --realistic or --no-realistic.
+
 $ ai-labels decide --media image --origin generated --realistic
 REQUIRED: Article 50(4), first subparagraph: a deep fake, meaning AI-generated or AI-manipulated content that resembles existing persons, objects, places, entities or events and would falsely appear authentic (Article 3(60)). ...
-Label: --kind generated --media image (EU icon: generated)
-Alt text: Generated with AI: image.
+Label: --kind generated --media image (official EU icon with this meaning: generated)
+Label sentence: Generated with AI: image.
 
-$ ai-labels stamp product-shot.jpg --kind generated --media image
+$ ai-labels stamp product-shot.jpg --kind generated --media image --description "Deck chair with a printed beach scene"
 product-shot.ai-label.jpg
-label: 292×49 px, dark, top-left, contrast 12.55:1
-alt: Generated with AI: image.
+label: 471×79 px, dark label, top-left, text contrast 12.55:1, stands out 10.66:1 from the image
+disclosure: Generated with AI: image.
+alt: Deck chair with a printed beach scene. Generated with AI: image.
 metadata: XMP DigitalSourceType trainedAlgorithmicMedia
 
 $ ai-labels render --kind modified --media image,voice --human text --lang pl --out label.svg
+$ ai-labels render --format html --kind generated --media text
 ```
 
-`ai-labels help` lists every option.
+`decide` exits with code 2 when it has to ask, so a script cannot mistake a question for a verdict. `ai-labels help` lists every option.
 
 ## Which label
 
@@ -93,7 +98,7 @@ $ ai-labels render --kind modified --media image,voice --human text --lang pl --
 | `generated` | All of the content comes from AI, apart from the prompt | Generated with AI / Wygenerowane przez AI |
 | `modified` | Real or human-made content was partly changed by AI: a swapped face, added objects, a replaced voice | Modified with AI / Zmodyfikowane przez AI |
 | `basic` | AI was involved and you want your own words, such as "Voice generated with AI" | Made with AI / Z udziałem AI |
-| `human` | A person made it without generative AI, and you want to say so | Made by a human / Stworzone przez człowieka |
+| `human` | A person made it without generative AI, and you want to say so | Made by a human / Stworzone przez człowieka (this project's own mark, not an EU icon) |
 
 `--media` adds the content-type icons. `--human text` puts a "Made by a human" label next to an AI label. `--short` switches to the compact wording that mirrors the EU icons ("Generated"), and `--uppercase` sets it in spaced capitals like the icons themselves.
 
@@ -106,22 +111,28 @@ $ ai-labels render --kind modified --media image,voice --human text --lang pl --
 - In user testing for the EU icons, labels with text were noticed and understood better. When the label is a legal duty, prefer the full form, or keep the minimal one and say the same thing in words in the caption.
 - Without text, "generated" and "modified" look the same. Only the alt text tells them apart.
 
+The minimal form goes down to 20 px; labels with text stop at 24 px, because smaller type is unreadable. At 20 to 32 px the hand is drawn on the pixel grid, so its fingers stay apart at 1x:
+
+![Minimal AI and human-made labels at 20, 24 and 32 px, at actual size and enlarged four times, in a light and a dark theme](docs/small.png)
+
 ## Accessibility
 
 Article 50(5) asks for disclosures that conform to the applicable accessibility requirements, and the EU icon guidance asks for alt text or ARIA labels. The labels follow WCAG 2.2:
 
 - **Contrast:** the text keeps at least 4.5:1 against its own background even when that background is semi-transparent and the image behind it is pure black or pure white. Options that would break this are refused unless you pass `--allow-low-contrast`.
-- **Screen readers:** `decide`, `render`, `stamp` and `alt` return the label as a sentence ("Generated with AI: image and voice."). Text burned into pixels is invisible to assistive technology, so publish that sentence in the `alt`, `aria-label` or caption. Rendered SVGs carry it in `aria-label` and `<title>`.
-- **Legible everywhere:** the text is drawn as outlines from Inter SemiBold, so it looks the same in every browser and image viewer and covers the alphabets of all 24 official EU languages. Stamped labels are never smaller than 20 px tall; an image too small for that gets an error instead of an unreadable label.
+- **Screen readers:** `render`, `stamp` and `alt` return the label sentence as `disclosure` ("Generated with AI: image and voice."). Text burned into pixels is invisible to assistive technology, so the alt text of a labelled image is a short description of what it shows, then that sentence: pass `--description` and the commands return it composed as `alt` ("Grey wolf head, digital painting. Generated with AI: image."). Never use the sentence alone as the alt of an informative image. When the label is a legal duty, put the sentence in a visible caption too. Rendered SVGs carry it in `aria-label` and `<title>`; when the image's alt or caption already says it, give a separate label `alt=""` or `aria-hidden="true"`.
+- **Real text on web pages:** `render --format html` writes the label as text with decorative inline icons and a stylesheet (`--css`). It zooms, reflows, translates and follows the reader's dark mode and forced colours, which an image of text cannot do (WCAG 1.4.4, 1.4.5, 1.4.12). Use SVG or PNG for images, video overlays and places that only accept an image.
+- **Legible everywhere:** in SVG, PNG and stamped labels the text is drawn as outlines from Inter SemiBold, so it looks the same in every browser and image viewer and covers the alphabets of all 24 official EU languages. Labels with text are never smaller than 24 px tall, and minimal ones 20 px; an image too small for that gets an error instead of an unreadable label.
 - **Still:** labels are static. The skill tells agents not to animate them.
 
 ## What the AI Act asks
 
-The short version is in the [Why](#why) section. The rules behind `decide`, with quotes and links to the Act, the EU icon page and the Code of Practice, are in [`references/rules.md`](skills/ai-content-labels/references/rules.md). `decide` is a checklist, not legal advice, and the Commission's guidelines on Article 50 may change the details.
+The short version is in the [Why](#why) section. The rules behind `decide`, with quotes and links to the Act, the EU icon page and the Code of Practice, are in [`references/rules.md`](skills/ai-content-labels/references/rules.md). They include the Commission's Guidelines on Article 50 of 20 July 2026, with paragraph numbers. `decide` is a checklist, not legal advice.
 
 ## Limits
 
 - **Video and audio are not stamped yet.** For video, render a PNG label and overlay it for the whole clip with ffmpeg (the skill shows the command). Labels that follow the timeline, such as a voice icon shown only while an AI voice speaks, are planned. Audio-only content needs a spoken disclaimer; `decide` says so.
+- **One image per `stamp` run.** Batch mode is planned.
 - **Stamping rewrites the file.** The EXIF data, the colour profile and the XMP (rights, credit, captions) are carried over, and the DigitalSourceType is added to the XMP. An older IPTC-IIM block is not carried over. The pixels change, so an existing C2PA manifest no longer verifies: sign again after stamping if you rely on C2PA.
 - **Two built-in languages.** English and Polish. Other languages work with `--text`; built-in wording for more languages is welcome as a pull request to [`i18n.mjs`](skills/ai-content-labels/scripts/lib/i18n.mjs).
 
@@ -133,8 +144,8 @@ The short version is in the [Why](#why) section. The rules behind `decide`, with
 
 ## Credits and licences
 
-- **EU icons:** European Commission, [EU icons for labelling AI-generated content](https://digital-strategy.ec.europa.eu/en/policies/eu-icons-labelling-ai-generated-content). Free to use without attribution. Using them does not mean you signed the Code of Practice.
-- **Content-type icons:** [Lucide](https://lucide.dev), ISC licence.
+- **EU icons:** European Commission, [EU icons for labelling AI-generated content](https://digital-strategy.ec.europa.eu/en/policies/eu-icons-labelling-ai-generated-content). Free to use without attribution. Using them does not mean you signed the Code of Practice. The human-made mark (a hand in the same disc) is this project's own design, not an EU icon.
+- **Content-type icons:** [Lucide](https://lucide.dev), ISC licence; the music and text icons are derived from Feather, MIT licence.
 - **Font:** [Inter](https://rsms.me/inter/) by Rasmus Andersson, SIL Open Font License 1.1.
 
 The code is MIT. Details for the third-party files are in [NOTICE.md](NOTICE.md).

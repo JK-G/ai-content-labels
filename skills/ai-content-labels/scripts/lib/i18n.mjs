@@ -39,9 +39,19 @@ export function list(items, lang) {
 // "Generated with AI: image and voice." The sentence used for alt text and aria-label.
 export function sentence({ kind, media = [], text, lang }) {
   const s = strings(lang);
-  const head = text ?? s[kind].says;
+  // A custom text may end in its own full stop ("Made with AI."); drop it so the sentence ends in one.
+  const head = String(text ?? s[kind].says).replace(/[\s.!?…]+$/, '');
   const names = media.map((m) => s.media[m]);
   return names.length ? `${head}: ${list(names, lang)}.` : `${head}.`;
+}
+
+// Yes/no options as they arrive from the CLI (strings) or MCP (booleans, sometimes strings).
+// Absent stays undefined, so callers can tell "no" from "not answered".
+export function parseBoolean(value, name) {
+  if (value == null) return undefined;
+  if (value === true || value === 1 || /^(true|yes|1)$/i.test(String(value))) return true;
+  if (value === false || value === 0 || /^(false|no|0)$/i.test(String(value))) return false;
+  throw new UsageError(`${name} takes true or false, not "${value}"`);
 }
 
 export class UsageError extends Error {}

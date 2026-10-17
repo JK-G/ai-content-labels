@@ -58,3 +58,37 @@ await sheet(
   ],
   { panelWidth: 240, rowHeight: 52 }
 );
+
+// Small sizes, where the minimal form lives: each label at 1x (enlarged pixel for pixel, so the
+// grid shows) next to the same label rendered at 4x.
+async function smallSheet(file, heights, { pad = 24, zoom = 4 } = {}) {
+  const tiles = [];
+  for (const [p, panel] of PANELS.entries()) {
+    for (const h of heights) {
+      const label = renderLabel({ media: 'image', human: 'text', minimal: true, height: h, theme: panel.theme });
+      const flat = (density) => sharp(Buffer.from(label.svg), { density }).flatten({ background: panel.background });
+      const crisp = await flat(72).png().toBuffer();
+      const actual = await sharp(crisp).resize({ width: label.width * zoom, kernel: 'nearest' }).png().toBuffer();
+      const sharp4 = await flat(72 * zoom).png().toBuffer();
+      tiles.push({ p, h, w: label.width * zoom, ht: label.height * zoom, actual, sharp4 });
+    }
+  }
+  const colW = Math.max(...tiles.map((t) => t.w));
+  const panelW = pad * 3 + colW * 2;
+  const rowH = Math.max(...tiles.map((t) => t.ht)) + pad;
+  const height = pad + heights.length * rowH;
+  const composite = [];
+  const bg = PANELS.map((panel, p) => `<rect x="${p * panelW}" width="${panelW}" height="${height}" fill="${panel.background}"/>`).join('');
+  for (const t of tiles) {
+    const i = heights.indexOf(t.h);
+    const top = pad + i * rowH + Math.round((rowH - pad - t.ht) / 2);
+    composite.push({ input: t.actual, left: t.p * panelW + pad, top }, { input: t.sharp4, left: t.p * panelW + pad * 2 + colW, top });
+  }
+  await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${panelW * 2}" height="${height}">${bg}</svg>`))
+    .composite(composite)
+    .png()
+    .toFile(join(docs, file));
+  console.log(`docs/${file}`);
+}
+
+await smallSheet('small.png', [20, 24, 32]);

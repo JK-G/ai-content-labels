@@ -1,32 +1,76 @@
 import { writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
-import { dirname, extname, join, basename } from 'node:path';
-import { renderLabel, officialIcon, normalize, labelSentence } from './render.mjs';
-import { stampImage, loadSharp } from './stamp.mjs';
+import { dirname, extname, join, basename, resolve } from 'node:path';
+import { renderLabel, officialIcon, normalize, labelSentence, altText } from './render.mjs';
+import { renderHtml, LABEL_CSS } from './html.mjs';
+import { stampImage, loadSharp, formatFor } from './stamp.mjs';
 import { decide } from './decide.mjs';
-import { UsageError } from './i18n.mjs';
+import { UsageError, sentence, parseBoolean } from './i18n.mjs';
 import { ASSETS_DIR, mediaIcons } from './assets.mjs';
 
 // The operations behind both the CLI and the MCP server.
 
-export async function render(opts) {
+const FORMATS = ['svg', 'html'];
+
+function scaleOf(opts) {
+  const scale = Number(opts.scale ?? 1);
+  if (!(scale >= 0.5 && scale <= 16)) throw new UsageError(`--scale must be between 0.5 and 16, not "${opts.scale}"`);
+  return scale;
+}
+
+export async function render(opts = {}) {
+  const format = opts.format ?? 'svg';
+  if (!FORMATS.includes(format)) throw new UsageError(`unknown format "${format}"; use svg or html`);
+  if (format === 'html') return renderHtmlLabel(opts);
+  if (parseBoolean(opts.css, '--css')) throw new UsageError('--css goes with --format html');
+  const scale = scaleOf(opts);
   const label = renderLabel(opts);
-  const result = { width: label.width, height: label.height, alt: label.alt, contrast: label.contrast };
+  const result = { width: label.width, height: label.height, alt: label.alt, disclosure: label.disclosure, contrast: label.contrast };
   if (opts.out) {
-    await writeImage(label.svg, opts.out, Number(opts.scale ?? 1));
-    result.out = opts.out;
+    const out = resolve(opts.out);
+    await writeImage(label.svg, out, scale);
+    result.out = out;
+    if (extname(out).toLowerCase() !== '.svg') result.pixels = { width: Math.round(label.width * scale), height: Math.round(label.height * scale) };
   } else {
     result.svg = label.svg;
   }
   return result;
 }
 
-export async function stamp(input, opts) {
+// --format html: real text for web pages. --css alone prints the stylesheet the snippet needs.
+async function renderHtmlLabel(opts) {
+  if (opts.scale != null) throw new UsageError('--scale applies to PNG and WebP, not to --format html');
+  if (parseBoolean(opts.css, '--css')) return { css: LABEL_CSS };
+  const label = renderHtml(opts);
+  const result = { html: label.html, css: label.css, alt: label.alt, disclosure: label.disclosure };
+  if (opts.out) {
+    const out = resolve(opts.out);
+    const ext = extname(out).toLowerCase();
+    if (ext !== '.html' && ext !== '.htm') throw new UsageError(`--format html writes an .html file, not "${ext || '(none)'}"; use .svg, .png or .webp without --format html`);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, `<style>\n${label.css}</style>\n${label.html}\n`);
+    result.out = out;
+  }
+  return result;
+}
+
+export async function stamp(input, opts = {}) {
   if (!input) throw new UsageError('stamp needs an input image');
-  if (!existsSync(input)) throw new UsageError(`input not found: ${input}`);
-  const ext = extname(input);
-  const output = opts.out ?? join(dirname(input), `${basename(input, ext)}.ai-label${ext}`);
+  // Label options first: a contradictory label is the user's first problem, not an existing output.
+  normalize({ ...opts, height: opts.height ?? 32 });
+  const source = resolve(input);
+  if (!existsSync(source)) throw new UsageError(`input not found: ${input}`);
+  const force = parseBoolean(opts.force, '--force') ?? false;
+  const ext = extname(source);
+  const output = resolve(opts.out ?? join(dirname(source), `${basename(source, ext)}.ai-label${ext}`));
+  const same = process.platform === 'win32' ? output.toLowerCase() === source.toLowerCase() : output === source;
+  if (same) throw new UsageError('--out must differ from the input');
+  formatFor(output);
+  if (/\.ai-label\.[^.]+$/i.test(basename(source)) && !force) {
+    throw new UsageError(`already labelled by name (${basename(source)}); stamp the original instead, or pass --force`);
+  }
+  if (existsSync(output) && !force) throw new UsageError(`${output} exists; pass --force to overwrite`);
   mkdirSync(dirname(output), { recursive: true });
-  return stampImage(input, output, opts);
+  return stampImage(source, output, { ...opts, force });
 }
 
 export function decideLabel(opts) {
@@ -34,19 +78,27 @@ export function decideLabel(opts) {
 }
 
 export function alt(opts) {
-  return { alt: labelSentence(normalize(opts)) };
+  const o = normalize(opts);
+  return { alt: altText(o), disclosure: labelSentence(o) };
 }
 
 export async function eu(name, opts = {}) {
-  const icon = officialIcon(name ?? 'generated', opts.variant ?? 'black');
-  if (!opts.out) return { file: icon.file, svg: icon.svg };
-  if (extname(opts.out).toLowerCase() === '.svg') {
-    mkdirSync(dirname(opts.out), { recursive: true });
-    copyFileSync(icon.file, opts.out);
+  const kind = name ?? 'generated';
+  const icon = officialIcon(kind, opts.variant ?? 'black');
+  // The official icons are in English; their alt text is the matching sentence.
+  const alt = sentence({ kind, lang: 'en' });
+  if (!opts.out) return { file: icon.file, svg: icon.svg, alt };
+  const out = resolve(opts.out);
+  const scale = scaleOf(opts);
+  const result = { file: icon.file, out, alt };
+  if (extname(out).toLowerCase() === '.svg') {
+    mkdirSync(dirname(out), { recursive: true });
+    copyFileSync(icon.file, out);
   } else {
-    await writeImage(icon.svg, opts.out, Number(opts.scale ?? 1), Number(opts.height ?? 0));
+    const info = await writeImage(icon.svg, out, scale, Number(opts.height ?? 0));
+    result.pixels = { width: info.width, height: info.height };
   }
-  return { file: icon.file, out: opts.out };
+  return result;
 }
 
 export function icons(opts = {}) {
@@ -55,7 +107,7 @@ export function icons(opts = {}) {
     mkdirSync(opts.out, { recursive: true });
     for (const n of media) copyFileSync(join(ASSETS_DIR, 'icons', 'media', `${n}.svg`), join(opts.out, `${n}.svg`));
   }
-  return { media, ...(opts.out && { out: opts.out }) };
+  return { media, ...(opts.out && { out: resolve(opts.out) }) };
 }
 
 export async function doctor() {
@@ -73,17 +125,15 @@ export async function doctor() {
 }
 
 async function writeImage(svg, out, scale = 1, height = 0) {
-  mkdirSync(dirname(out), { recursive: true });
   const ext = extname(out).toLowerCase();
+  if (!['.svg', '.png', '.webp'].includes(ext)) throw new UsageError(`unsupported label format "${ext || '(none)'}"; use .svg, .png or .webp`);
+  mkdirSync(dirname(out), { recursive: true });
   if (ext === '.svg') {
     writeFileSync(out, svg + '\n');
-    return;
+    return null;
   }
   const sharp = await loadSharp();
   let img = sharp(Buffer.from(svg), { density: 72 * scale });
   if (height) img = img.resize({ height });
-  if (ext === '.png') await img.png().toFile(out);
-  else if (ext === '.webp') await img.webp({ lossless: true }).toFile(out);
-  else throw new UsageError(`unsupported label format "${ext}"; use .svg, .png or .webp`);
+  return ext === '.png' ? img.png().toFile(out) : img.webp({ lossless: true }).toFile(out);
 }
-
