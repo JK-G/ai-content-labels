@@ -65,7 +65,7 @@ the repository or was copied on its own), or call the CLI through
 - Match the language of the content: `--lang pl` for Polish. Only `en` and `pl` are built in; for
   another language pass `--text` in that language (plain words, no abbreviation other than "AI").
 - `--short` gives the compact wording ("Generated"), useful for two labels side by side.
-- `--minimal` drops the text: the author mark (EU "AI" disc or a hand) plus the content-type icons.
+- `--minimal` drops the text: the author mark (EU "AI" disc, or a hand in the same disc) plus the content-type icons.
   Use it only when the user asks for it or the spot is too small for text (thumbnails, avatars, UI
   chips). When `decide` says the label is required, keep the full form, or use the minimal one and
   put the label sentence in a visible caption. Without text, "generated" and "modified" look the

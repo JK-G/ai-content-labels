@@ -44,7 +44,7 @@ export function decide(input = {}) {
     out.label = { kind: 'human', media: [media] };
     out.notes.push(
       'A "human-made" label is a claim to your audience. Use it only when no generative AI produced or changed this part; AI spell-check or noise reduction is a judgement call, so say so if in doubt.',
-      'The human-made label must not look like the EU AI icon.'
+      'The human-made mark is the EU disc with a hand instead of "AI", so readers see the two as a pair.'
     );
     return finish(out, lang);
   }

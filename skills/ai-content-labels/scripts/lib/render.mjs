@@ -95,7 +95,7 @@ export function labelSentence(o) {
   ].join(' ');
 }
 
-// One pill: the author mark (EU "AI" disc or a hand), the text unless minimal, then the media icons.
+// One pill: the author mark (EU "AI" disc, or a hand in the same disc), the text unless minimal, then the media icons.
 function pill({ kind, text, media, o, theme }) {
   const H = o.height;
   const shown = o.minimal ? '' : o.uppercase ? text.toLocaleUpperCase(o.lang) : text;
@@ -108,12 +108,8 @@ function pill({ kind, text, media, o, theme }) {
   const tracking = o.uppercase ? 0.06 : 0;
   const iconSize = H * 0.5;
   const iconGap = H * 0.14;
-  const handSize = H * 0.56;
 
-  const mark =
-    kind === 'human'
-      ? (x) => icon(mediaIcons().icons.human, x + inset + (markBox - handSize) / 2, (H - handSize) / 2, handSize, theme.ink)
-      : (x) => euDisc(x + inset, inset, markBox, theme.eu);
+  const mark = kind === 'human' ? (x) => handDisc(x + inset, inset, markBox, theme.eu) : (x) => euDisc(x + inset, inset, markBox, theme.eu);
 
   // Without text the divider sits closer to the mark; without text or icons the pill is a circle.
   let width = inset + markBox;
@@ -165,11 +161,22 @@ function euDisc(x, y, size, variant) {
   );
 }
 
+// The human-made counterpart of the EU disc: the same disc and colours, a hand instead of "AI".
+function handDisc(x, y, size, variant) {
+  const [disc, hand] = EU_COLORS[variant];
+  // A heavier stroke than the content-type icons, so the hand matches the weight of the bold "AI".
+  const handSize = size * 0.62;
+  return (
+    `<circle cx="${round(x + size / 2)}" cy="${round(y + size / 2)}" r="${round(size / 2)}" fill="${disc}"/>` +
+    icon(mediaIcons().icons.human, x + (size - handSize) / 2, y + (size - handSize) / 2, handSize, hand, 2.75)
+  );
+}
+
 // A 24×24 stroke icon scaled to `size` px at (x, y).
-function icon(drawing, x, y, size, color) {
+function icon(drawing, x, y, size, color, strokeWidth = 2) {
   return (
     `<g transform="translate(${round(x)} ${round(y)}) scale(${round(size / 24, 5)})" fill="none" stroke="${color}" ` +
-    `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${drawing}</g>`
+    `stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${drawing}</g>`
   );
 }
 

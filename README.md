@@ -101,7 +101,7 @@ $ ai-labels render --kind modified --media image,voice --human text --lang pl --
 
 ![Minimal labels: the AI disc with an image icon, with image and voice icons, an AI label next to a hand with a text icon, and a hand with text and image icons](docs/minimal.png)
 
-`--minimal` drops the text. The left side says who made it (the EU "AI" disc or a hand), the right side says what (the content-type icons). It fits where a full label does not: thumbnails, avatars, dense feeds, UI chips. Two things to know before you use it:
+`--minimal` drops the text. The left side says who made it (the EU "AI" disc, or a hand in the same disc), the right side says what (the content-type icons). It fits where a full label does not: thumbnails, avatars, dense feeds, UI chips. Two things to know before you use it:
 
 - In user testing for the EU icons, labels with text were noticed and understood better. When the label is a legal duty, prefer the full form, or keep the minimal one and say the same thing in words in the caption.
 - Without text, "generated" and "modified" look the same. Only the alt text tells them apart.

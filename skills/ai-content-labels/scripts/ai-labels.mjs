@@ -25,8 +25,8 @@ Label options (render, stamp, alt)
   --human-text "..."     your own text for the human-made part
   --short                compact wording ("Generated" instead of "Generated with AI")
   --uppercase            upper case with letter spacing, like the EU icons
-  --minimal              no text: only the author mark (EU "AI" disc or a hand) and
-                         the content-type icons
+  --minimal              no text: only the author mark (the EU "AI" disc, or a hand
+                         in the same disc) and the content-type icons
   --theme light|dark     stamp also accepts auto (default there)
   --height <px>          default 32; stamp picks about 4.5% of the shorter image side
   --background-opacity <0-1>
