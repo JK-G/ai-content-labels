@@ -11,9 +11,9 @@ export const LANGS = {
     human: { label: 'Made by a human', short: 'Human-made', says: 'Made by a human' },
     media: { image: 'image', text: 'text', audio: 'audio', voice: 'voice', music: 'music', video: 'video' },
     and: 'and',
-    // Examples used in decide's advice.
+    // Used in decide's advice: a spoken disclaimer, and the placeholder for what an image shows.
     spoken: 'This recording contains a voice generated with AI',
-    describe: 'Modern house among pine trees, architectural visualisation.',
+    describe: '<what the image shows>.',
   },
   pl: {
     generated: { label: 'Wygenerowane przez AI', short: 'Wygenerowane', says: 'Wygenerowane przez AI' },
@@ -23,7 +23,7 @@ export const LANGS = {
     media: { image: 'obraz', text: 'tekst', audio: 'dźwięk', voice: 'głos', music: 'muzyka', video: 'wideo' },
     and: 'i',
     spoken: 'To nagranie zawiera głos wygenerowany przez AI',
-    describe: 'Nowoczesny dom wśród sosen, wizualizacja architektoniczna.',
+    describe: '<co przedstawia obraz>.',
   },
 };
 

@@ -89,6 +89,19 @@ test('decide_label returns "unknown" with a question when a deciding fact is mis
   assert.match(unknown.question, /genuine photo/);
   assert.doesNotMatch(unknown.question, /--/);
   assert.equal(json(r[2]).required, false);
+  assert.equal(unknown.next, undefined);
+  assert.deepEqual(json(r[2]).next.arguments, { kind: 'generated', media: ['image'], lang: 'en' });
+});
+
+test('decide_label hands over the next call: tool, arguments to pass unchanged, arguments to fill in', async () => {
+  const r = await session([call('decide_label', { media: 'image', origin: 'modified', realistic: true }), { method: 'tools/list' }]);
+  const { next } = json(r[1]);
+  assert.equal(next.tool, 'stamp_image');
+  assert.deepEqual(next.arguments, { kind: 'modified', media: ['image'], lang: 'en' });
+  assert.deepEqual(next.fill, ['input', 'description']);
+  const tools = Object.fromEntries(r[2].result.tools.map((t) => [t.name, t]));
+  for (const k of [...Object.keys(next.arguments), ...next.fill]) assert.ok(tools.stamp_image.inputSchema.properties[k], k);
+  assert.match(tools.decide_label.description, /`next`/);
 });
 
 test('decide_label asks about editorial review for public-interest text, in MCP terms', async () => {
@@ -112,6 +125,7 @@ test('schemas: whole-pixel heights, the 24 EU languages', async () => {
   const tools = Object.fromEntries(r[1].result.tools.map((t) => [t.name, t]));
   assert.equal(tools.render_label.inputSchema.properties.height.type, 'integer');
   assert.equal(tools.eu_icon.inputSchema.properties.height.type, 'integer');
+  assert.equal(tools.stamp_image.inputSchema.properties.display_width.type, 'integer');
   assert.equal(tools.render_label.inputSchema.properties.lang.enum.length, 24);
   assert.match(tools.decide_label.description, /editorial_review for public-interest text/);
 });

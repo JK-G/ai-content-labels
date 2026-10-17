@@ -73,7 +73,9 @@ Article 50 of Regulation (EU) 2024/1689"). Paragraph numbers below were checked 
   available, for example in legal information or a colophon (para 138).
 - **Article 50(5) (paras 141-144).** Clear means noticeable, easy to understand and accessible,
   including for persons with disabilities (para 142). The duty applies to each output and each
-  person's first exposure (para 143). Article 50 adds no accessibility requirements of its own; the
+  person's first exposure (para 143). Where people may foreseeably not see content from its
+  beginning, a disclosure only at the beginning "does not adequately inform those persons and
+  should be complemented with disclosure at later moments, where possible" (para 143). Article 50 adds no accessibility requirements of its own; the
   existing ones apply (para 144).
 - **Dates (paras 153-154).** Article 50 applies from 2 August 2026 (para 153). Deep fakes generated
   or manipulated before that date need not be labelled retroactively. Text generated before that
@@ -134,15 +136,22 @@ not make anyone a signatory.
   enough to be noticed (b), embedded in the content unless an equivalent alternative such as an
   overlay exists (c), perceivable at first exposure and against any background (d).
 - **Sub-measure 1.2.2 (visual placement).** No intervening overlay elements, for example the top
-  right corner of an image or video (a). For video, the label is shown from the start and kept for
-  the whole video, or, where that is not possible, shown at the start, at regular intervals and
-  after breaks, so people who join mid-way still see it (b). For published text, above or at the
-  top of the text, near the headline, or in the colophon (f).
-- **Sub-measure 1.2.3 (audio).** In long or live audio, the audible disclaimer is repeated at
-  intervals and after breaks.
-- **Measure 2.1 (explaining labels).** Signatories publish an explanation of the labels they use
-  other than the EU icon, so the audience can understand them. This project applies the same idea
-  to the human-made mark.
+  right corner of an image or video (a). For video, signatories "will display the icon or
+  equivalent label at the beginning of the video as well as, where possible, at regular intervals
+  throughout the video and, at a minimum, after interruptions (e.g., after commercial or
+  advertising breaks)"; they are "furthermore encouraged" to display it throughout the deep fake
+  video or during the deep fake part (b). Keeping it on screen for the whole video is this
+  project's recommendation, not the Code's baseline. For published text, above or at the top of
+  the text, near the headline, or in the colophon (f).
+- **Sub-measure 1.2.3 (audio).** Where visual disclosure is not possible, an audible disclaimer at
+  the latest at first exposure; for long-form or live audio, "where appropriate", reminders at
+  regular intervals and at minimum after interruptions.
+- **Measure 2.1 (internal compliance process).** Signatories keep internal processes and
+  documentation of how they implement the disclosures. Publishing is only encouraged:
+  "Signatories are encouraged to publish information on the disclosure solution they apply", and
+  for their own icon or label "a similar description of the icon or label is encouraged to be made
+  publicly available", which may include images and the meaning of each label. This project
+  applies that encouragement to the human-made mark.
 - **Commitment 3 (creative works).** Disclosure that does not hamper the work but is clear,
   distinguishable, accessible and given at first exposure, for example in accompanying notes, the
   description or the opening or end credits; on websites and apps it may sit outside but adjacent
@@ -159,7 +168,7 @@ not make anyone a signatory.
 | Plain-language text with "generated" or "modified" (Code Measure 1.1(b)) | Text next to the basic EU icon in the content's language |
 | Accessibility (Article 50(5), Guidelines para 142, WCAG) | 4.5:1 text contrast on any backdrop, `role="img"`, `lang` and `aria-label` in the SVG, real text with `render --format html`, alt text and the label sentence returned by every command |
 | Audio-only (Code Measure 1.1, audio; Sub-measure 1.2.3) | `decide` tells you to add an audible disclaimer at the start, in the language of the recording, and to repeat it in long or live recordings |
-| Video seen from the middle (Code Sub-measure 1.2.2(b); Guidelines para 143) | `decide` tells you to keep the label for the whole video, or to repeat it at intervals and after breaks |
+| Video seen from the middle (Code Sub-measure 1.2.2(b); Guidelines para 143) | `decide` tells you to show the label from the start, repeat it at regular intervals where possible and at least after breaks, as the Code asks. Keeping it for the whole video, which the Code encourages, is this project's recommendation |
 | Editorial review decides public-interest text (Guidelines paras 133-138) | `decide` asks `--editorial-review` before it gives a verdict for public-interest text |
 | Creative works (Article 50(4), Code Commitment 3) | `decide --creative` moves the label next to the work, into the description or the credits |
 | Editorial review of text (Guidelines paras 133-138, Code Commitment 4) | `decide --editorial-review` asks you to publish who holds editorial responsibility |

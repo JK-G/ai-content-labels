@@ -1,5 +1,5 @@
 import { euBasic, mediaIcons } from './assets.mjs';
-import { normalize, xml, composeAlt, ALT_MISSING } from './render.mjs';
+import { normalize, xml, composeAlt, altMissing, HAND_RATIO, HAND_STROKE } from './render.mjs';
 import { strings, sentence } from './i18n.mjs';
 import { round } from './text.mjs';
 
@@ -24,7 +24,7 @@ export const LABEL_CSS = `.ai-label{color-scheme:inherit;--ai-label-bg:light-dar
 .ai-label-mark{flex:none;width:1.875em;height:1.875em}
 .ai-label-disc{fill:var(--ai-label-disc)}
 .ai-label-glyph{fill:var(--ai-label-glyph)}
-.ai-label-hand{fill:none;stroke:var(--ai-label-glyph);stroke-width:2.667;stroke-linecap:round;stroke-linejoin:round}
+.ai-label-hand{fill:none;stroke:var(--ai-label-glyph);stroke-width:${HAND_STROKE};stroke-linecap:round;stroke-linejoin:round}
 .ai-label-body{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.2em .65em;min-width:0}
 .ai-label-text{min-width:0;overflow-wrap:break-word;hyphens:auto}
 .ai-label-upper .ai-label-text{text-transform:uppercase;letter-spacing:.06em;font-size:max(.85em,10px)}
@@ -46,7 +46,7 @@ export function renderHtml(input = {}) {
   const html = `<span class="${cls}" role="note" lang="${o.lang}"${theme}>${pills.map((p) => p.html).join(' ')}</span>`;
   const disclosure = pills.map((p) => p.sentence).join(' ');
   const alt = composeAlt(o);
-  return { html, css: LABEL_CSS, alt, ...(alt == null && { altMissing: ALT_MISSING }), disclosure };
+  return { html, css: LABEL_CSS, alt, ...altMissing(o, alt), disclosure };
 }
 
 function pill({ kind, text, media, own, o }) {
@@ -75,10 +75,11 @@ const rule = () => '<span class="ai-label-rule" aria-hidden="true"></span>';
 // The author mark in a 24×24 box: the EU "AI" disc, or the hand in the same disc.
 function mark(kind) {
   if (kind === 'human') {
-    // At three-quarter scale with a 2-unit stroke (2 px at a 24 px mark) the fingers sit 3 px apart.
-    const size = 18;
-    const x = 3 - 0.48;
-    const y = 3 + 0.48;
+    // The same proportion and stroke as the scaled hand in SVG and PNG labels (0.64 of the disc,
+    // nudged to its optical centre). On the web the mark is 1.875em, so no pixel-grid hinting.
+    const size = 24 * HAND_RATIO;
+    const x = (24 - size) / 2 - 0.48;
+    const y = (24 - size) / 2 + 0.48;
     return (
       '<svg class="ai-label-mark" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><circle class="ai-label-disc" cx="12" cy="12" r="12"/>' +
       `<g class="ai-label-hand" transform="translate(${round(x)} ${round(y)}) scale(${round(size / 24, 5)})">${mediaIcons().icons.human}</g></svg>`

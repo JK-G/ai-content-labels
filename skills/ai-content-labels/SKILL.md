@@ -11,8 +11,10 @@ Run the CLI from the project root:
 node "${CLAUDE_SKILL_DIR}/scripts/ai-labels.mjs" <command> [options]
 ```
 
-If the plugin's MCP server is connected, the tools `decide_label`, `render_label`, `stamp_image` and
-`eu_icon` do the same. `help` lists every option. Stamping and PNG output need `sharp`. When `doctor`
+`decide` writes its next command as `ai-labels ...`, the name the package installs (also as
+`ai-content-labels`); here it means the `node` line above. If the plugin's MCP server is connected,
+the tools `decide_label`, `render_label`, `stamp_image` and `eu_icon` do the same. `help` lists
+every option. Stamping and PNG output need `sharp`. When `doctor`
 reports it missing, run the install command it prints (it knows whether this skill sits in a clone of
 the repository or was copied on its own), or call the CLI through
 `npx -y github:JK-G/ai-content-labels <command>`.
@@ -46,16 +48,23 @@ the repository or was copied on its own), or call the CLI through
 2. **Decide:** `decide --media image --origin generated --realistic --lang pl`. It says whether the
    label is a legal duty or a voluntary one, the next command to run, which label to use (and the
    official EU icon with the same meaning), where to put it, and the label sentence (`disclosure`).
-   `--explain` adds the basis, notes and sources; `--json` always has everything. Pass its label
-   (kind, media, lang) unchanged to the next step.
+   `--explain` adds the basis, notes and sources; `--json` always has everything. In JSON and over
+   MCP, `next` holds the next call: `tool`, `arguments` to pass unchanged, `fill` (what you still
+   supply, such as `input` and `description`) and the same step as a CLI line (`cli`).
 3. **Make the label:**
    - Image file: `stamp photo.jpg --kind generated --media image --lang pl --description "..."`.
-     Writes `photo.ai-label.jpg` with the label in the pixels, keeps the EXIF and XMP of the
-     original and adds an IPTC DigitalSourceType to the XMP for generated and modified labels. The
-     size and colour adapt to the image; `--position` picks the corner (default top-left). It
-     stamps one still file per run and refuses to overwrite or to stamp a labelled file again
-     unless you pass `--force`. For social posts, crop to the platform's final aspect first
-     (Instagram 4:5 or 1:1), then stamp, so the label sits inside every crop.
+     `--kind` is required: stamp never guesses the claim it burns in. Writes `photo.ai-label.jpg`
+     with the label in the pixels, keeps the EXIF and XMP of the original and adds an IPTC
+     DigitalSourceType to the XMP for generated and modified labels. The size and colour adapt to
+     the image; `--position` picks the corner (default top-left). It stamps one still file per run
+     and refuses to overwrite or to stamp a labelled file again unless you pass `--force`.
+   - Size for the screen: the automatic size is in the file's pixels. A 1600×1200 photo shown full
+     width on a phone (about 390 px) displays its label about 18 px tall. When the image will be shown
+     narrower than its own width (social feeds, stories, mobile articles), pass the display width:
+     `--display-width 390` makes the label at least 28 px tall as shown. The result's
+     `label.minDisplayWidth` says the narrowest width at which the label stays 24 px tall. For
+     social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then stamp
+     with `--display-width 390`, so the label sits inside every crop.
    - A folder of images: run `decide` once per distinct kind of content, then stamp each file with
      its own `--description`, and report one table: file, output, alt text.
    - Web page or app: use `render --format html` (real text: zooms, reflows, translates) and put
@@ -64,15 +73,16 @@ the repository or was copied on its own), or call the CLI through
      PNG (`render ... --out label.svg`) for images, video overlays and places that only accept an
      image.
    - Video, for now: render a PNG (`render ... --out label.png --height <about 6% of the shorter
-     side>`) and overlay it from the first frame for the whole video, away from the player
-     controls: `ffmpeg -i in.mp4 -i label.png -filter_complex "overlay=24:24" -c:a copy out.mp4`.
-     If it cannot stay for the whole video, show it at the start, at regular intervals and after
-     every break. Put the label sentence in visible text next to the player and say it in the audio
+     side>`) and overlay it away from the player controls. The Code of Practice asks for the label
+     at the start, at regular intervals where possible and at least after every break, and
+     encourages keeping it for the whole video. This project recommends the whole video, which is
+     what this does: `ffmpeg -i in.mp4 -i label.png -filter_complex "overlay=24:24" -c:a copy out.mp4`.
+     Put the label sentence in visible text next to the player and say it in the audio
      (a spoken disclaimer at the start, or a line in the audio description); captions alone do not
      reach blind viewers. Labels that change with the timeline are not built yet.
    - Audio: put the visual label on the player, cover or page, and tell the user to add a short
      spoken disclaimer at the start, in the language of the recording; in long or live recordings,
-     repeat it at intervals and after breaks. Put the sentence at the start of the transcript too.
+     repeat it at regular intervals where it fits and at least after breaks. Put the sentence at the start of the transcript too.
      Audio alone cannot carry a visual label.
 4. **Publish the alt text and the label sentence** with the content. Alt text = a short description
    of what the image shows, then the label sentence, e.g.

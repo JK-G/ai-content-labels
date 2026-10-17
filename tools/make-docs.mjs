@@ -24,7 +24,7 @@ async function sheet(file, rows, { panelWidth, rowHeight, pad = 24 }) {
     const x0 = p * panelWidth;
     parts.push(`<rect x="${x0}" width="${panelWidth}" height="${height}" fill="${panel.background}"/>`);
     rows.forEach((row, i) => {
-      const label = renderLabel({ ...row, theme: panel.theme });
+      const label = renderLabel({ ...row, theme: panel.theme, density: SCALE });
       const y = pad + i * rowHeight + (rowHeight - label.height) / 2;
       parts.push(`<svg x="${x0 + pad}" y="${y}" width="${label.width}" height="${label.height}">${label.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</svg>`);
     });
@@ -65,11 +65,13 @@ async function smallSheet(file, heights, { pad = 24, zoom = 4 } = {}) {
   const tiles = [];
   for (const [p, panel] of PANELS.entries()) {
     for (const h of heights) {
-      const label = renderLabel({ media: 'image', human: 'text', minimal: true, height: h, theme: panel.theme });
-      const flat = (density) => sharp(Buffer.from(label.svg), { density }).flatten({ background: panel.background });
-      const crisp = await flat(72).png().toBuffer();
+      // Each rendering gets the label drawn for its pixel density, as render --scale does.
+      const draw = (density) => renderLabel({ media: 'image', human: 'text', minimal: true, height: h, theme: panel.theme, density });
+      const label = draw(1);
+      const flat = (svg, density) => sharp(Buffer.from(svg), { density }).flatten({ background: panel.background });
+      const crisp = await flat(label.svg, 72).png().toBuffer();
       const actual = await sharp(crisp).resize({ width: label.width * zoom, kernel: 'nearest' }).png().toBuffer();
-      const sharp4 = await flat(72 * zoom).png().toBuffer();
+      const sharp4 = await flat(draw(zoom).svg, 72 * zoom).png().toBuffer();
       tiles.push({ p, h, w: label.width * zoom, ht: label.height * zoom, actual, sharp4 });
     }
   }
@@ -91,4 +93,4 @@ async function smallSheet(file, heights, { pad = 24, zoom = 4 } = {}) {
   console.log(`docs/${file}`);
 }
 
-await smallSheet('small.png', [20, 24, 32]);
+await smallSheet('small.png', [20, 24, 28, 32, 40]);

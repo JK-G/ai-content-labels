@@ -3,6 +3,7 @@
 import { render, stamp, decideLabel, alt, eu, icons, doctor } from './lib/api.mjs';
 import { basename } from 'node:path';
 import { UsageError, parseBoolean } from './lib/i18n.mjs';
+import { PHONE_WIDTH } from './lib/stamp.mjs';
 
 const HELP = `ai-labels <command> [options]
 
@@ -18,7 +19,7 @@ Commands
   doctor                 Check the setup
 
 Label options (render, stamp, alt)
-  --kind generated|modified|basic|human   default generated
+  --kind generated|modified|basic|human   default generated; stamp requires it
   --media image,text,audio,voice,music,video
                          what was made with AI (or by a human, with --kind human)
   --human text,...       add a "made by a human" part next to an AI label
@@ -37,6 +38,7 @@ Label options (render, stamp, alt)
   --height <px>          whole px, default 32, at least 24 with text and 20 with --minimal;
                          stamp picks about 6% of the shorter side and at least 2.5%
                          of the longer side, never below 28 px or above 512 px
+                         (in the file's pixels; see --display-width)
   --background-opacity <0-1>
                          refused below the level that keeps 4.5:1 text contrast
                          (override with --allow-low-contrast)
@@ -51,6 +53,10 @@ render options
 stamp options
   --out <file>           default <name>.ai-label.<ext> next to the input
   --position top-left|top-right|bottom-left|bottom-right   default top-left
+  --display-width <px>   how wide the image will be shown, in CSS px; the label is made
+                         at least 28 px tall at that width. Use 390 for an image shown
+                         full width on a phone (feed posts, stories, mobile articles):
+                         a 1080 px wide post then gets a 78 px label instead of 65
   --no-metadata          skip the IPTC DigitalSourceType tag; the small ai-content-labels
                          marker that prevents double stamping is always written
   --force                overwrite an existing output, or stamp a labelled file again
@@ -83,7 +89,7 @@ const LABEL = ['kind', 'media', 'human', 'lang', 'text', 'human-text', 'descript
 // The options each command accepts; anything else is a typo and must not pass silently.
 const OPTIONS = {
   render: [...LABEL, 'out', 'scale', 'format', 'css'],
-  stamp: [...LABEL, 'out', 'position', 'metadata', 'force'],
+  stamp: [...LABEL, 'out', 'position', 'display-width', 'metadata', 'force'],
   alt: LABEL,
   decide: ['media', 'origin', 'realistic', 'creative', 'public-interest', 'editorial-review', 'lang', 'explain'],
   eu: ['variant', 'out', 'scale', 'height'],
@@ -121,30 +127,29 @@ function parseArgs(argv) {
 }
 
 // The label sentence, and the alt text of the content when a description made it possible.
-const altLines = (r) => `disclosure: ${r.disclosure}\n` + (r.alt ? `alt: ${r.alt}\n` : 'alt: add --description "what the image shows" to get the full alt text\n');
+// A text or audio label has no picture to describe, so it gets no hint about --description.
+const altLines = (r) =>
+  `disclosure: ${r.disclosure}\n` + (r.alt ? `alt: ${r.alt}\n` : r.altMissing ? 'alt: add --description "what the image shows" to get the full alt text\n' : '');
+
+// How big the label looks where the image is shown: a phone does not display file pixels 1:1.
+function displayLine(r, minimal) {
+  const l = r.label;
+  const floor = minimal ? 20 : 24;
+  if (l.displayWidth) {
+    const small = l.displayHeight < floor ? ` (under ${floor} px: the image is too narrow for a larger label)` : '';
+    return `display: ${l.displayHeight} px tall when the image is shown ${l.displayWidth} px wide${small}\n`;
+  }
+  const phone = l.minDisplayWidth > PHONE_WIDTH ? `; shown narrower, as on a phone, it is smaller: pass --display-width ${PHONE_WIDTH}` : '';
+  return `display: ${floor} px tall or more when the image is shown ${l.minDisplayWidth} px wide or wider${phone}\n`;
+}
 
 // "text contrast 12.55:1", with a warning when --allow-low-contrast let a label below 4.5:1 through.
 const contrastLine = (r, minimal, sep) => `${minimal ? 'mark' : 'text'} contrast${sep}${r.contrast.toFixed(2)}:1${r.wcag ? '' : ' (below WCAG 1.4.3, 4.5:1)'}`;
 
 const attr = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
-// decide's ready next command, with the label flags filled in.
-function nextStep(d) {
-  const l = d.label;
-  const flags =
-    `--kind ${l.kind} --media ${l.media.join(',')}` + (l.lang && l.lang !== 'en' ? ` --lang ${l.lang}` : '') + (d.disclosure == null ? ' --text "label in that language"' : '');
-  const head = d.required ? 'Next:' : 'Next (voluntary):';
-  switch (l.media[0]) {
-    case 'image':
-      return `${head} ai-labels stamp <image> ${flags} --description "what it shows"`;
-    case 'text':
-      return `${head} ai-labels render --format html ${flags}, at the top of the text`;
-    case 'video':
-      return `${head} ai-labels render ${flags} --out label.png --height <6% of the shorter side>, then ffmpeg -i in.mp4 -i label.png -filter_complex "overlay=24:24" -c:a copy out.mp4`;
-    default:
-      return `${head} a short spoken disclaimer at the start, and ai-labels render --format html ${flags} next to the player`;
-  }
-}
+// decide's next step as one line: "Next: ai-labels stamp <image> --kind generated ...".
+const nextLine = (d) => `${d.required ? 'Next:' : 'Next (voluntary):'} ${d.next.cli}${d.next.note ? `, ${d.next.note}` : ''}`;
 
 async function main(argv) {
   const { positional, flags, keys, missing } = parseArgs(argv);
@@ -190,6 +195,7 @@ async function main(argv) {
         (r) =>
           `${r.output}\nlabel: ${r.label.width}×${r.label.height} px, ${r.label.theme} pill, ${r.label.position}, ` +
           `${contrastLine(r, minimal, ' ')}, stands out ${r.label.separation.toFixed(2)}:1 from the image\n` +
+          displayLine(r, minimal) +
           altLines(r) +
           (r.metadata ? `metadata: ${r.metadata}\n` : '')
       );
@@ -213,7 +219,7 @@ async function main(argv) {
           : explain
             ? [
                 d.verdict,
-                nextStep(d),
+                nextLine(d),
                 label(d),
                 ...d.placement.map((p) => `- ${p}`),
                 `Basis: ${d.basis}`,
@@ -224,7 +230,7 @@ async function main(argv) {
               ]
             : [
                 d.verdict,
-                nextStep(d),
+                nextLine(d),
                 label(d),
                 ...d.placement.slice(0, 2).map((p) => `- ${p}`),
                 `Accessibility: ${d.accessibility[0]}`,

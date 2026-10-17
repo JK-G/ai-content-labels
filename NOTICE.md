@@ -12,7 +12,7 @@ Terms, as stated on that page: the icons "are made publicly available for everyo
 
 ## Lucide
 
-Files: `skills/ai-content-labels/assets/icons/media/*.svg` and `assets/icons/media.json` (from Lucide 1.59.0).
+Files: `skills/ai-content-labels/assets/icons/media/*.svg` and `assets/icons/media.json` (from Lucide 1.59.0). The same notices ship inside the skill as `skills/ai-content-labels/assets/icons/LICENSE.txt`, so a copy of the skill folder carries them; `skills/ai-content-labels/NOTICE.md` lists all third-party material in the skill.
 
 ```
 ISC License

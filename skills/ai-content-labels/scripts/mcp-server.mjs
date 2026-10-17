@@ -28,7 +28,7 @@ const TOOLS = [
   {
     name: 'decide_label',
     description:
-      'Decide which AI label a piece of content needs and whether Article 50(4) of the EU AI Act requires it (deep fakes, public-interest text without editorial review). Returns a short verdict, the label to use, the EU icon, placement and accessibility rules, and the label sentence (disclosure). When a deciding fact is missing (realistic for image, video and audio; public_interest, or editorial_review for public-interest text) it returns required:"unknown", the argument in `missing` and one question: ask the user, never guess. A checklist, not legal advice. Call this before render_label or stamp_image.',
+      'Decide which AI label a piece of content needs and whether Article 50(4) of the EU AI Act requires it (deep fakes, public-interest text without editorial review). Returns a short verdict, the label to use, the EU icon, placement and accessibility rules, the label sentence (disclosure) and the next call in `next`: tool (stamp_image or render_label), arguments to pass unchanged, fill (the arguments you still supply, such as input and description) and the same step as a CLI line (cli). When a deciding fact is missing (realistic for image, video and audio; public_interest, or editorial_review for public-interest text) it returns required:"unknown", the argument in `missing` and one question: ask the user, never guess. A checklist, not legal advice. Call this before render_label or stamp_image.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -86,6 +86,11 @@ const TOOLS = [
         ...labelProps,
         theme: { type: 'string', enum: ['auto', 'light', 'dark'], description: 'auto (default) picks the label colour from the image' },
         position: { type: 'string', enum: POSITIONS, description: 'Default top-left' },
+        display_width: {
+          type: 'integer',
+          description:
+            'How wide the image will be shown, in CSS px; the label is made at least 28 px tall at that width. Use 390 for an image shown full width on a phone (feed posts, stories). The result always reports label.minDisplayWidth, the narrowest display width at which the label stays 24 px tall',
+        },
         metadata: { type: 'boolean', description: 'Write the IPTC DigitalSourceType tag, default true; the ai-content-labels marker that prevents double stamping is always written' },
         force: { type: 'boolean', description: 'Overwrite an existing output, or stamp a file that is already labelled' },
       },
@@ -156,7 +161,7 @@ async function handle(msg) {
         serverInfo: { name: 'ai-content-labels', version: VERSION },
         instructions:
           'Label AI-generated and human-made content with the official EU icon. Call decide_label first; if it returns required:"unknown", ask the user its question and call it again. ' +
-          "Pass decide_label's label (kind, media, lang) unchanged to stamp_image or render_label: stamp_image for image files, render_label with format html for web pages and UI. " +
+          "Then make the call in decide_label's next: next.tool with next.arguments unchanged, plus the arguments named in next.fill (stamp_image for image files, render_label with format html for web pages and UI). " +
           'Alt text = a short description of what the image shows, then the label sentence (disclosure); pass description so the result has it composed as alt. alt is null until you pass description; never publish disclosure as the alt of the image. ' +
           'render_label also returns labelAlt, the alt of an <img> that shows the label on its own. ' +
           'When the label is a legal duty, also put the sentence in a visible caption. If stamp_image fails with NO_SHARP, show the user the install command from the error.',

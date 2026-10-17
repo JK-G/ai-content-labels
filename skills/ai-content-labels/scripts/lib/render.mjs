@@ -42,6 +42,8 @@ export function normalize(input = {}) {
     allowLowContrast: bool(input, 'allowLowContrast', '--allow-low-contrast'),
     metadata: parseBoolean(input.metadata, '--metadata') ?? true,
     force: bool(input, 'force', '--force'),
+    // Output pixels per SVG unit (a PNG at --scale 3 has 3): internal, for hinting the hand.
+    density: Number(input.density ?? 1),
   };
   if (o.text === '') throw new UsageError('--text is empty');
   if (o.humanText === '') throw new UsageError('--human-text is empty');
@@ -130,6 +132,14 @@ export function composeAlt(o) {
 // What a result says instead of an alt text when no description was passed.
 export const ALT_MISSING = 'pass description (what the image shows) to get the alt text: description + disclosure';
 
+// The hint, only where there is a picture to describe: a label with image or video in it, or one
+// that names no media at all. A text or audio label gets none, so nobody invents an image for it.
+export function altMissing(o, alt) {
+  const parts = [...o.media, ...o.human];
+  const visual = !parts.length || parts.includes('image') || parts.includes('video');
+  return alt == null && visual ? { altMissing: ALT_MISSING } : {};
+}
+
 // One pill: the author mark (EU "AI" disc, or a hand in the same disc), the text unless minimal, then the media icons.
 function pill({ kind, text, media, o, theme }) {
   const H = o.height;
@@ -146,7 +156,7 @@ function pill({ kind, text, media, o, theme }) {
   const iconSize = H * 0.5;
   const iconGap = H * 0.14;
 
-  const mark = kind === 'human' ? (x) => handDisc(x + inset, inset, markBox, theme.eu) : (x) => euDisc(x + inset, inset, markBox, theme.eu);
+  const mark = kind === 'human' ? (x) => handDisc(x + inset, inset, markBox, theme.eu, o.density) : (x) => euDisc(x + inset, inset, markBox, theme.eu);
 
   // Without text the divider sits closer to the mark; without text or icons the pill is a circle.
   let width = inset + markBox;
@@ -205,29 +215,134 @@ export function euDisc(x, y, size, variant) {
 }
 
 // The human-made counterpart of the EU disc: the same disc and colours, a hand instead of "AI".
-export function handDisc(x, y, size, variant) {
+// The hand is 0.64 of the disc at every size, so it keeps the weight of the "AI" letters next to it.
+export const HAND_RATIO = 0.64;
+// The stroke in hand units (24×24 box): heavier than the content-type icons, to match the bold "AI".
+export const HAND_STROKE = 2.75;
+// Lucide's hand is an outline: its fingers are bounded by vertical strokes at these x positions.
+const STEMS = [6, 10, 14, 18, 22];
+
+// `density` is the pixels per SVG unit of the output (2 for a PNG at --scale 2); hinting needs it.
+export function handDisc(x, y, size, variant, density = 1) {
   const [disc, hand] = EU_COLORS[variant];
-  // A heavier stroke than the content-type icons, so the hand matches the weight of the bold "AI".
-  // Up to a 33 px disc (labels up to 44 px tall) the fingers sit 2-3 px apart and a scaled stroke
-  // blurs them into one shape. There the hand is drawn on the pixel grid instead: at half scale with
-  // a 1 px stroke (fingers 2 px apart), or at three-quarter scale with a 2 px stroke (3 px apart),
-  // snapped so every finger fills whole pixel columns with a clean gap between them.
-  const grid = size < 24 ? { scale: 0.5, px: 1 } : size < 33 ? { scale: 0.75, px: 2 } : null;
-  const handSize = grid ? 24 * grid.scale : size * 0.64;
-  const sw = grid ? grid.px / grid.scale : 2.75;
-  // The hand's mass sits up and right of its 24×24 box; nudge it so it centres in the disc.
-  let hx = x + (size - handSize) / 2 - 0.02 * size;
-  let hy = y + (size - handSize) / 2 + 0.02 * size;
-  if (grid) {
-    // Finger centres are at 6, 10, 14 and 18 units: put them on pixel centres (1 px) or edges (2 px).
-    const f = hx + 6 * grid.scale;
-    const snapped = grid.px === 1 ? Math.floor(f) + 0.5 : Math.round(f);
-    [hx, hy] = [hx + snapped - f, Math.round(hy)];
-  }
+  const circle = `<circle cx="${round(x + size / 2)}" cy="${round(y + size / 2)}" r="${round(size / 2)}" fill="${disc}"/>`;
+  const g = handGeometry(x, y, size, density);
+  if (!g.grid) return circle + icon(mediaIcons().icons.human, g.x, g.y, g.size, hand, HAND_STROKE);
+  // Hinted: the paths are redrawn in pixel coordinates, each finger stroke on whole pixels.
+  const paths = [...mediaIcons().icons.human.matchAll(/d="([^"]+)"/g)].map((m) => `<path d="${mapPath(m[1], g.fx, g.fy, g.s)}"/>`).join('');
   return (
-    `<circle cx="${round(x + size / 2)}" cy="${round(y + size / 2)}" r="${round(size / 2)}" fill="${disc}"/>` +
-    icon(mediaIcons().icons.human, hx, hy, handSize, hand, sw)
+    circle +
+    `<g fill="none" stroke="${hand}" stroke-width="${g.stroke}" stroke-linecap="round" stroke-linejoin="round">${paths}</g>`
   );
+}
+
+// Where the hand goes in a disc of `size` px at (x, y). From a 33 px disc up (labels 44 px and taller
+// at 1x) the hand is simply scaled. Below that the finger strokes sit 2-3 px apart and a scaled stroke
+// blurs them into one shape, so the hand is hinted like a font: about the same proportion, a
+// whole-pixel stroke, and each finger stroke snapped to the pixel grid with at least one clear pixel
+// between neighbours. The trade-offs: the smallest crisp hand is 12 px (fingers 2 px apart), so in
+// discs under 19 px (labels under 25 px) it is larger than 0.64 of the disc; and a 2 px stroke needs
+// fingers 3 px apart, so labels up to 34 px get a 1 px stroke, a little lighter than the "AI".
+// Hinting works in output pixels: at `density` 2 or 3 most sizes are simply scaled.
+export function handGeometry(x, y, size, density = 1) {
+  if (density !== 1) {
+    const g = handGeometry(x * density, y * density, size * density);
+    const back = { s: g.s / density, size: g.size / density, x: g.x / density, y: g.y / density };
+    if (!g.grid) return { ...g, ...back };
+    return { ...g, ...back, stroke: g.stroke / density, stems: g.stems.map((v) => v / density), fx: (u) => g.fx(u) / density, fy: (v) => g.fy(v) / density };
+  }
+  const continuous = (s) => ({
+    s,
+    size: 24 * s,
+    // The hand's mass sits up and right of its 24×24 box; nudge it so it centres in the disc.
+    x: x + (size - 24 * s) / 2 - 0.02 * size,
+    y: y + (size - 24 * s) / 2 + 0.02 * size,
+  });
+  if (size >= 33) return { grid: false, ...continuous((size * HAND_RATIO) / 24) };
+  let c = continuous(Math.max(0.5, (size * HAND_RATIO) / 24));
+  // A 2 px stroke at three-quarter scale (fingers 3 px apart), as soon as that stays within 0.70.
+  if (c.s < 0.75 && 18 / size <= 0.7) c = continuous(0.75);
+  const s = c.s;
+  // A whole-pixel stroke close to the scaled one, thin enough to leave a clear pixel between fingers.
+  let stroke = Math.max(1, Math.round(HAND_STROKE * s));
+  while (stroke > 1 && Math.floor(4 * s) < stroke + 1) stroke--;
+  // Odd strokes centre on pixel centres, even ones on pixel edges.
+  const snap = (v) => (stroke % 2 ? Math.floor(v) + 0.5 : Math.round(v));
+  const stems = [];
+  for (const k of STEMS) {
+    const at = snap(c.x + s * k);
+    stems.push(stems.length ? Math.max(at, stems.at(-1) + stroke + 1) : at);
+  }
+  // The palm's bottom edge (y = 22) on the grid too.
+  const dy = snap(c.y + 22 * s) - (c.y + 22 * s);
+  const fx = (u) => {
+    if (u <= STEMS[0]) return stems[0] + s * (u - STEMS[0]);
+    if (u >= STEMS.at(-1)) return stems.at(-1) + s * (u - STEMS.at(-1));
+    const i = Math.min(STEMS.length - 2, Math.floor((u - STEMS[0]) / 4));
+    return stems[i] + ((stems[i + 1] - stems[i]) * (u - STEMS[i])) / 4;
+  };
+  const fy = (v) => c.y + dy + s * v;
+  return { grid: true, s, size: ((stems.at(-1) - stems[0]) / 16) * 24, stroke, stems, fx, fy };
+}
+
+// Redraws an SVG path through the maps fx and fy (piecewise linear in x, linear in y), in absolute
+// commands. Arcs keep their flags; their radii follow the local scale.
+function mapPath(d, fx, fy, s) {
+  const tokens = d.match(/[a-zA-Z]|-?(?:\d*\.\d+|\d+\.?)(?:e-?\d+)?/g);
+  const out = [];
+  let i = 0;
+  let cmd = '';
+  let [cx, cy, sx0, sy0] = [0, 0, 0, 0];
+  const num = () => Number(tokens[i++]);
+  const pt = (x, y) => `${round(fx(x))} ${round(fy(y))}`;
+  while (i < tokens.length) {
+    if (/[a-zA-Z]/.test(tokens[i])) cmd = tokens[i++];
+    const rel = cmd === cmd.toLowerCase();
+    const ox = rel ? cx : 0;
+    const oy = rel ? cy : 0;
+    switch (cmd.toUpperCase()) {
+      case 'M': {
+        [cx, cy] = [ox + num(), oy + num()];
+        [sx0, sy0] = [cx, cy];
+        out.push(`M${pt(cx, cy)}`);
+        cmd = rel ? 'l' : 'L'; // further pairs are lines
+        break;
+      }
+      case 'L':
+        [cx, cy] = [ox + num(), oy + num()];
+        out.push(`L${pt(cx, cy)}`);
+        break;
+      case 'H':
+        cx = ox + num();
+        out.push(`L${pt(cx, cy)}`);
+        break;
+      case 'V':
+        cy = oy + num();
+        out.push(`L${pt(cx, cy)}`);
+        break;
+      case 'C': {
+        const p = [0, 1, 2].map(() => [ox + num(), oy + num()]);
+        [cx, cy] = p[2];
+        out.push(`C${p.map(([a, b]) => pt(a, b)).join(' ')}`);
+        break;
+      }
+      case 'A': {
+        const [rx, ry, rot, large, sweep] = [num(), num(), num(), num(), num()];
+        const [x1, y1] = [ox + num(), oy + num()];
+        const local = x1 !== cx ? Math.abs((fx(x1) - fx(cx)) / (x1 - cx)) : s;
+        out.push(`A${round(rx * local)} ${round(ry * s)} ${rot} ${large} ${sweep} ${pt(x1, y1)}`);
+        [cx, cy] = [x1, y1];
+        break;
+      }
+      case 'Z':
+        [cx, cy] = [sx0, sy0];
+        out.push('Z');
+        break;
+      default:
+        throw new Error(`unsupported path command ${cmd}`);
+    }
+  }
+  return out.join('');
 }
 
 // A 24×24 stroke icon scaled to `size` px at (x, y).

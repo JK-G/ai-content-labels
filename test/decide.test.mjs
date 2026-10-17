@@ -65,7 +65,36 @@ test('the alt text example is built from the label sentence, so a human verdict 
   const h = decide({ media: 'image', origin: 'human' }).accessibility[0];
   assert.match(h, /Made by a human: image\./);
   assert.doesNotMatch(h, /Generated with AI/);
-  assert.match(decide({ media: 'image', origin: 'generated', realistic: true, lang: 'pl' }).accessibility[0], /Nowoczesny dom wśród sosen, wizualizacja architektoniczna\. Wygenerowane przez AI: obraz\./);
+  // A placeholder, never a ready description someone could paste onto an unrelated image.
+  assert.match(decide({ media: 'image', origin: 'generated', realistic: true }).accessibility[0], /alt="<what the image shows>\. Generated with AI: image\."/);
+  assert.match(decide({ media: 'image', origin: 'generated', realistic: true, lang: 'pl' }).accessibility[0], /alt="<co przedstawia obraz>\. Wygenerowane przez AI: obraz\."/);
+  for (const media of ['image', 'video', 'audio', 'text']) {
+    assert.doesNotMatch(JSON.stringify(decide({ media, origin: 'generated', realistic: true, publicInterest: false })), /house|dom wśród/i);
+  }
+  // Image guidance (describe what it shows) only for images.
+  for (const media of ['video', 'audio', 'text']) assert.doesNotMatch(decide({ media, origin: 'generated', realistic: true, publicInterest: false }).accessibility[0], /what the image shows/);
+});
+
+test('every verdict carries the next step as data: the MCP tool, its arguments and the CLI line', () => {
+  const image = decide({ media: 'image', origin: 'generated', realistic: true, lang: 'pl' }).next;
+  assert.equal(image.tool, 'stamp_image');
+  assert.deepEqual(image.arguments, { kind: 'generated', media: ['image'], lang: 'pl' });
+  assert.deepEqual(image.fill, ['input', 'description']);
+  assert.equal(image.cli, 'ai-labels stamp <image> --kind generated --media image --lang pl --description "what it shows"');
+  const text = decide({ media: 'text', origin: 'generated', publicInterest: true, editorialReview: false }).next;
+  assert.equal(text.tool, 'render_label');
+  assert.equal(text.arguments.format, 'html');
+  assert.equal(text.note, 'at the top of the text');
+  assert.equal(decide({ media: 'video', origin: 'modified', realistic: true }).next.tool, 'render_label');
+  assert.deepEqual(decide({ media: 'video', origin: 'modified', realistic: true }).next.fill, ['out', 'height']);
+  assert.match(decide({ media: 'audio', origin: 'generated', realistic: true }).next.note, /spoken disclaimer/);
+  // Voluntary verdicts get one too; a language without wording asks for the text.
+  assert.equal(decide({ media: 'image', origin: 'human' }).next.arguments.kind, 'human');
+  const de = decide({ media: 'image', origin: 'generated', realistic: true, lang: 'de' }).next;
+  assert.ok(de.fill.includes('text'));
+  assert.match(de.cli, /--lang de --text "label in that language"/);
+  // No next step while decide still has a question.
+  assert.equal(decide({ media: 'image', origin: 'generated' }).next, undefined);
 });
 
 test('languages: any EU code; without built-in wording the sentence is left to the user', () => {
@@ -182,4 +211,15 @@ test('accessibility advice fits the media', () => {
   assert.match(image, /what it shows, then the label sentence/);
   assert.doesNotMatch(image, /during a video/);
   assert.match(decide({ media: 'video', origin: 'generated', realistic: true }).accessibility.join(' '), /during a video/);
+});
+
+test('the video rule is the Code\'s, and the whole-video advice is marked as this project\'s', () => {
+  const [rule] = decide({ media: 'video', origin: 'generated', realistic: true }).placement;
+  assert.match(rule, /^Show the label from the first frame, repeat it at regular intervals where possible and at least after every break/);
+  assert.match(rule, /The Code also encourages keeping it on screen for the whole video or the whole AI part; this project recommends that/);
+  assert.doesNotMatch(rule, /keep it on screen for the whole video\. If you cannot/);
+});
+
+test('image advice points social posts to --display-width', () => {
+  assert.match(decide({ media: 'image', origin: 'generated', realistic: true }).placement[1], /--display-width 390/);
 });

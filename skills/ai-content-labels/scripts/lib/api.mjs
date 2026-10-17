@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync, copyFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, extname, join, basename, resolve } from 'node:path';
-import { renderLabel, officialIcon, normalize, labelSentence, composeAlt, ALT_MISSING } from './render.mjs';
+import { renderLabel, officialIcon, normalize, labelSentence, composeAlt, altMissing } from './render.mjs';
 import { renderHtml, LABEL_CSS } from './html.mjs';
 import { stampImage, loadSharp, formatFor } from './stamp.mjs';
 import { decide } from './decide.mjs';
@@ -23,14 +23,16 @@ export async function render(opts = {}) {
   if (format === 'html') return renderHtmlLabel(opts);
   if (parseBoolean(opts.css, '--css')) throw new UsageError('--css goes with --format html');
   const scale = scaleOf(opts);
-  const label = renderLabel(opts);
+  // A PNG or WebP knows its pixel density; an SVG is hinted for 1x.
+  const raster = opts.out && ['.png', '.webp'].includes(extname(opts.out).toLowerCase());
+  const label = renderLabel({ ...opts, density: raster ? scale : 1 });
   // alt is for the content the label describes (null without a description); labelAlt is the alt of
   // an <img> that shows this label on its own.
   const result = {
     width: label.width,
     height: label.height,
     alt: label.alt,
-    ...(label.alt == null && { altMissing: ALT_MISSING }),
+    ...altMissing(label.options, label.alt),
     labelAlt: label.disclosure,
     disclosure: label.disclosure,
     contrast: label.contrast,
@@ -70,6 +72,13 @@ const inFlight = new Set();
 
 export async function stamp(input, opts = {}) {
   if (!input) throw new UsageError('stamp needs an input image');
+  // The label is a public claim burned into the file: never default it. render keeps a default kind,
+  // because it writes nothing into the user's content.
+  if (opts.kind == null) {
+    throw new UsageError(
+      'stamp needs --kind generated, modified, basic or human. Not sure which? Run: ai-labels decide --media image --origin generated|modified|assisted|human'
+    );
+  }
   // Label options first: a contradictory label is the user's first problem, not an existing output.
   normalize({ ...opts, height: opts.height ?? 32 });
   const source = resolve(input);
@@ -105,7 +114,7 @@ export function decideLabel(opts) {
 export function alt(opts) {
   const o = normalize(opts);
   const text = composeAlt(o);
-  return { alt: text, ...(text == null && { altMissing: ALT_MISSING }), disclosure: labelSentence(o) };
+  return { alt: text, ...altMissing(o, text), disclosure: labelSentence(o) };
 }
 
 export async function eu(name, opts = {}) {

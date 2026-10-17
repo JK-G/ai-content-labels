@@ -161,15 +161,15 @@ export function decide(input = {}) {
   const placement = {
     image: [
       'Burn the label into the image pixels (the `stamp` command), so it stays visible when the image is downloaded or reshared.',
-      "Use a corner where platforms do not draw their own buttons or captions; the label must be visible at first sight, with nothing covering it. For social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then stamp, so the label sits inside every crop.",
+      "Use a corner where platforms do not draw their own buttons or captions; the label must be visible at first sight, with nothing covering it. For social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then stamp with --display-width 390, so the label sits inside every crop and is readable full width on a phone.",
     ],
     video: [
-      'Show the label from the first frame and keep it on screen for the whole video. If you cannot, show it at the start, at regular intervals and after every break, because people who join mid-way must still see it (Code Sub-measure 1.2.2(b); Guidelines para 143).',
+      'Show the label from the first frame, repeat it at regular intervals where possible and at least after every break (such as an ad break), so people who join mid-way still see it (Code Sub-measure 1.2.2(b); Guidelines para 143). The Code also encourages keeping it on screen for the whole video or the whole AI part; this project recommends that, as the simplest way to cover every viewer.',
       'Burn it into the frames so it survives downloads and reshares; place it away from the player controls.',
-      'If only some parts are AI (for example the voice in certain scenes), keep the persistent label and add per-segment icons on top of it, never instead of it.',
+      'If only some parts are AI (for example the voice in certain scenes), keep the label above and add per-segment icons on top of it, never instead of it.',
     ],
     audio: [
-      `Audio-only content cannot show a visual label: add a short audible disclaimer at the start, in the language of the recording (for example "${spoken}"). In long or live recordings repeat it at intervals and after breaks (Code Sub-measure 1.2.3).`,
+      `Audio-only content cannot show a visual label: add a short audible disclaimer at the start, in the language of the recording (for example "${spoken}"). In long or live recordings repeat it at regular intervals where appropriate, and at least after breaks (Code Sub-measure 1.2.3).`,
       'Where the audio has a player, cover art or a page, show the visual label there too.',
     ],
   };
@@ -184,10 +184,37 @@ export function decide(input = {}) {
   return finish(out, media, lang);
 }
 
+// The command to run after decide: the MCP tool with the arguments to pass unchanged, the arguments
+// still to fill in (MCP names), and the same step as a CLI line. `ai-labels` is the package's command
+// (also installed as `ai-content-labels`); in a copied skill it is node <skill>/scripts/ai-labels.mjs.
+export function nextStep(label, disclosure) {
+  const own = disclosure == null; // no built-in wording: the user writes the label text
+  const flags =
+    `--kind ${label.kind} --media ${label.media.join(',')}` + (label.lang !== 'en' ? ` --lang ${label.lang}` : '') + (own ? ' --text "label in that language"' : '');
+  const text = own ? ['text'] : [];
+  switch (label.media[0]) {
+    case 'image':
+      return { tool: 'stamp_image', arguments: { ...label }, fill: ['input', 'description', ...text], cli: `ai-labels stamp <image> ${flags} --description "what it shows"` };
+    case 'text':
+      return { tool: 'render_label', arguments: { ...label, format: 'html' }, fill: text, cli: `ai-labels render --format html ${flags}`, note: 'at the top of the text' };
+    case 'video':
+      return {
+        tool: 'render_label',
+        arguments: { ...label },
+        fill: ['out', 'height', ...text],
+        cli: `ai-labels render ${flags} --out label.png --height <6% of the shorter side>`,
+        note: 'then ffmpeg -i in.mp4 -i label.png -filter_complex "overlay=24:24" -c:a copy out.mp4',
+      };
+    default:
+      return { tool: 'render_label', arguments: { ...label, format: 'html' }, fill: text, cli: `ai-labels render --format html ${flags}`, note: 'next to the player, and a short spoken disclaimer at the start' };
+  }
+}
+
 function finish(out, media, lang) {
   const said = out.label && disclosureOf(out.label);
-  // The example is built from the computed sentence, so a human-made verdict never shows an AI one.
-  const example = said ? ` ("${LANGS[lang].describe} ${said}")` : ', both in the language of the page';
+  // A placeholder, not a ready description, so nobody pastes an example onto an unrelated image.
+  // It is built from the computed sentence, so a human-made verdict never shows an AI one.
+  const example = said ? ` (alt="${LANGS[lang].describe} ${said}")` : ', both in the language of the page';
   const describe = {
     image: `Give the image an alt text that says what it shows, then the label sentence${example}; text burned into an image is invisible to screen readers.`,
     video:
@@ -205,6 +232,7 @@ function finish(out, media, lang) {
   );
   if (out.label) {
     out.disclosure = said;
+    out.next = nextStep(out.label, said);
     if (said == null) {
       out.notes.push(
         `There is no built-in wording for "${lang}": write the label sentence in that language yourself and pass it as --text (and --human-text for a human-made part) when you render or stamp.`

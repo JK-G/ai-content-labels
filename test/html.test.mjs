@@ -77,10 +77,11 @@ test('narrow columns wrap whole words and move the icons under them', () => {
   assert.doesNotMatch(renderHtml({ minimal: true }).html, /ai-label-body/);
 });
 
-test('the hand in the HTML mark is drawn at three-quarter scale with a 2 px stroke', () => {
+test('the hand in the HTML mark has the same proportion and stroke as the SVG label', () => {
   const { html } = renderHtml({ kind: 'human', media: 'text' });
-  assert.match(html, /<g class="ai-label-hand" transform="translate\(2\.52 3\.48\) scale\(0\.75\)">/);
-  assert.match(LABEL_CSS, /\.ai-label-hand\{[^}]*stroke-width:2\.667/);
+  // 0.64 of the 24-unit disc, nudged to its optical centre, like the scaled SVG hand.
+  assert.match(html, /<g class="ai-label-hand" transform="translate\(3\.84 4\.8\) scale\(0\.64\)">/);
+  assert.match(LABEL_CSS, /\.ai-label-hand\{[^}]*stroke-width:2\.75;/);
 });
 
 test('alt is null without a description; with one it is the description, then the sentence', () => {

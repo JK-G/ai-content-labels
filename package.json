@@ -12,6 +12,7 @@
   },
   "bin": {
     "ai-content-labels": "skills/ai-content-labels/scripts/ai-labels.mjs",
+    "ai-labels": "skills/ai-content-labels/scripts/ai-labels.mjs",
     "ai-content-labels-mcp": "skills/ai-content-labels/scripts/mcp-server.mjs"
   },
   "files": [

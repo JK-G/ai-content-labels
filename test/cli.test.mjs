@@ -65,7 +65,7 @@ test('eu copies the official file unchanged', () => {
 test('stamp burns the label in, tags the file and returns alt text', { skip: !sharp && 'sharp not installed' }, async () => {
   const input = join(tmp, 'photo.jpg');
   await sharp({ create: { width: 1200, height: 800, channels: 3, background: '#d8e2ea' } }).jpeg().toFile(input);
-  const r = cli('stamp', input, '--media', 'image', '--json');
+  const r = cli('stamp', input, '--kind', 'generated', '--media', 'image', '--json');
   assert.equal(r.status, 0, r.stderr);
   const result = JSON.parse(r.stdout);
   assert.ok(existsSync(result.output));
@@ -80,10 +80,42 @@ test('stamp burns the label in, tags the file and returns alt text', { skip: !sh
   assert.ok(corner[0] < 120, 'dark label pixels in the corner');
 });
 
+test('stamp without --kind refuses and points to decide, writing nothing', { skip: !sharp && 'sharp not installed' }, async () => {
+  const input = join(tmp, 'no-kind.png');
+  await sharp({ create: { width: 800, height: 600, channels: 3, background: '#abc' } }).png().toFile(input);
+  const r = cli('stamp', input, '--media', 'image');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /stamp needs --kind generated, modified, basic or human\. Not sure which\? Run: ai-labels decide/);
+  assert.ok(!existsSync(join(tmp, 'no-kind.ai-label.png')));
+  // render keeps its default: it writes nothing into the user's content.
+  assert.equal(cli('render', '--media', 'image').status, 0);
+});
+
+test('the printed command name is installed: ai-labels and ai-content-labels point to the same CLI', () => {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(pkg.bin['ai-labels'], 'skills/ai-content-labels/scripts/ai-labels.mjs');
+  // npx runs the bin named after the package.
+  assert.equal(pkg.bin['ai-content-labels'], pkg.bin['ai-labels']);
+  assert.match(cli('help').stdout, /^ai-labels <command>/);
+  const next = cli('decide', '--media', 'image', '--origin', 'generated', '--realistic').stdout.split('\n')[1];
+  assert.ok(next.startsWith('Next: ai-labels '));
+  const json = JSON.parse(cli('decide', '--media', 'text', '--origin', 'generated', '--no-public-interest', '--json').stdout);
+  assert.equal(json.next.tool, 'render_label');
+  assert.match(json.next.cli, /^ai-labels render --format html/);
+});
+
+test('text and audio labels get no hint to describe an image', () => {
+  const text = JSON.parse(cli('render', '--format', 'html', '--media', 'text', '--json').stdout);
+  assert.equal(text.alt, null);
+  assert.equal(text.altMissing, undefined);
+  assert.equal(cli('alt', '--media', 'audio').stdout, 'disclosure: Generated with AI: audio.\n');
+  assert.match(JSON.parse(cli('alt', '--media', 'text', '--human', 'image', '--json').stdout).altMissing, /pass description/);
+});
+
 test('stamp refuses images too small for a legible label', { skip: !sharp && 'sharp not installed' }, async () => {
   const input = join(tmp, 'tiny.png');
   await sharp({ create: { width: 60, height: 30, channels: 3, background: '#fff' } }).png().toFile(input);
-  const r = cli('stamp', input);
+  const r = cli('stamp', input, '--kind', 'generated');
   assert.equal(r.status, 2);
   assert.match(r.stderr, /too small/);
 });
@@ -148,7 +180,7 @@ test('stamp keeps EXIF and XMP, fixes the orientation and adds the tag', { skip:
     .withXmp(rights)
     .jpeg()
     .toFile(input);
-  const r = JSON.parse(cli('stamp', input, '--media', 'image', '--json').stdout);
+  const r = JSON.parse(cli('stamp', input, '--kind', 'generated', '--media', 'image', '--json').stdout);
   const meta = await sharp(r.output).metadata();
   assert.equal(`${meta.width}x${meta.height}`, '800x1200');
   assert.ok(!meta.orientation || meta.orientation === 1);
@@ -167,7 +199,7 @@ test('stamp keeps EXIF and XMP, fixes the orientation and adds the tag', { skip:
 test('stamp refuses an explicit height below 24 px for a label with text', { skip: !sharp && 'sharp not installed' }, async () => {
   const input = join(tmp, 'small-label.png');
   await sharp({ create: { width: 800, height: 600, channels: 3, background: '#fff' } }).png().toFile(input);
-  const r = cli('stamp', input, '--height', '16');
+  const r = cli('stamp', input, '--kind', 'generated', '--height', '16');
   assert.equal(r.status, 2);
   assert.match(r.stderr, /at least 24 px/);
 });
@@ -245,16 +277,16 @@ test('stamp takes one image; its JSON has an absolute path and the composed alt'
   assert.match(many.stderr, /takes one image/);
   const input = join(tmp, 'wolf.png');
   await sharp({ create: { width: 900, height: 900, channels: 3, background: '#1b2330' } }).png().toFile(input);
-  const r = JSON.parse(cli('stamp', input, '--media', 'image', '--description', 'Grey wolf head', '--json').stdout);
+  const r = JSON.parse(cli('stamp', input, '--kind', 'generated', '--media', 'image', '--description', 'Grey wolf head', '--json').stdout);
   assert.equal(r.alt, 'Grey wolf head. Generated with AI: image.');
   assert.equal(r.wcag, true);
   assert.equal(r.disclosure, 'Generated with AI: image.');
   assert.equal(r.label.theme, 'light');
   assert.ok(isAbsolute(r.output));
-  const again = cli('stamp', r.output, '--media', 'image');
+  const again = cli('stamp', r.output, '--kind', 'generated', '--media', 'image');
   assert.equal(again.status, 2);
   assert.match(again.stderr, /already labelled/);
-  const overlap = cli('stamp', input, '--media', 'image,text', '--human', 'text', '--out', join(tmp, 'o.png'));
+  const overlap = cli('stamp', input, '--kind', 'generated', '--media', 'image,text', '--human', 'text', '--out', join(tmp, 'o.png'));
   assert.equal(overlap.status, 2);
   assert.match(overlap.stderr, /text is in both/);
 });
@@ -327,12 +359,24 @@ test('decide asks about editorial review for public-interest text', () => {
 test('stamp summary: pill colour, mark contrast for minimal, a WCAG warning below 4.5:1', { skip: !sharp && 'sharp not installed' }, async () => {
   const input = join(tmp, 'summary.png');
   await sharp({ create: { width: 900, height: 600, channels: 3, background: '#30343a' } }).png().toFile(input);
-  const minimal = cli('stamp', input, '--media', 'image', '--minimal', '--out', join(tmp, 'summary-min.png'));
+  const minimal = cli('stamp', input, '--kind', 'generated', '--media', 'image', '--minimal', '--out', join(tmp, 'summary-min.png'));
   assert.equal(minimal.status, 0, minimal.stderr);
   assert.match(minimal.stdout, /light pill, top-left, mark contrast 14\.78:1/);
   assert.doesNotMatch(minimal.stdout, /text contrast/);
-  const low = cli('stamp', input, '--media', 'image', '--background-opacity', '0.3', '--allow-low-contrast', '--out', join(tmp, 'summary-low.png'));
+  const low = cli('stamp', input, '--kind', 'generated', '--media', 'image', '--background-opacity', '0.3', '--allow-low-contrast', '--out', join(tmp, 'summary-low.png'));
   assert.match(low.stdout, /\(below WCAG 1\.4\.3, 4\.5:1\)/);
-  const lowJson = JSON.parse(cli('stamp', input, '--media', 'image', '--background-opacity', '0.3', '--allow-low-contrast', '--out', join(tmp, 'summary-low2.png'), '--json').stdout);
+  const lowJson = JSON.parse(cli('stamp', input, '--kind', 'generated', '--media', 'image', '--background-opacity', '0.3', '--allow-low-contrast', '--out', join(tmp, 'summary-low2.png'), '--json').stdout);
   assert.equal(lowJson.wcag, false);
+});
+
+test('stamp reports how big the label looks where the image is shown', { skip: !sharp && 'sharp not installed' }, async () => {
+  const input = join(tmp, 'story.png');
+  await sharp({ create: { width: 720, height: 1280, channels: 3, background: '#223' } }).png().toFile(input);
+  const plain = cli('stamp', input, '--kind', 'human', '--media', 'image');
+  assert.equal(plain.status, 0, plain.stderr);
+  assert.match(plain.stdout, /^display: 24 px tall or more when the image is shown 402 px wide or wider; shown narrower, as on a phone, it is smaller: pass --display-width 390$/m);
+  const phone = cli('stamp', input, '--kind', 'human', '--media', 'image', '--display-width', '390', '--out', join(tmp, 'story-phone.png'));
+  assert.equal(phone.status, 0, phone.stderr);
+  assert.match(phone.stdout, /^display: 28\.2 px tall when the image is shown 390 px wide$/m);
+  assert.match(cli('help').stdout, /--display-width <px>/);
 });

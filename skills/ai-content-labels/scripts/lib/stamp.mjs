@@ -91,6 +91,12 @@ export function mergeXmp(existing, kind, { sourceType = DIGITAL_SOURCE[kind] ?? 
 // Stamped labels never go below these heights: a label with text needs 24 px to stay readable.
 export const MIN_HEIGHT = { text: 24, minimal: 20 };
 
+// The height a label gets as displayed when the caller says how wide the image is shown
+// (--display-width): the same 28 px the automatic size never goes below in the file.
+export const DISPLAY_HEIGHT = 28;
+// The width of a phone screen in CSS px, the case --display-width is for.
+export const PHONE_WIDTH = 390;
+
 // Label height for an image: about 6% of the shorter side and at least 2.5% of the longer side
 // (so tall 9:16 covers and wide banners still get a visible label), between 28 and 512 px.
 export const autoHeight = (w, h) => Math.min(512, Math.max(28, Math.round(Math.min(w, h) * 0.06), Math.round(Math.max(w, h) * 0.025)));
@@ -104,6 +110,13 @@ export async function stampImage(input, output, opts = {}) {
   const min = minimal ? MIN_HEIGHT.minimal : MIN_HEIGHT.text;
   if (opts.height != null && !(Number(opts.height) >= min)) {
     throw new UsageError(`a stamped label must be at least ${min} px tall to stay legible${minimal ? '' : '; use --minimal for smaller spots'}`);
+  }
+  const displayWidth = opts.displayWidth == null ? null : Number(opts.displayWidth);
+  if (displayWidth != null) {
+    if (!Number.isInteger(displayWidth) || displayWidth < 100 || displayWidth > 10000) {
+      throw new UsageError(`--display-width is the width the image is shown at, in whole CSS px (100 to 10000; 390 for a phone), not "${opts.displayWidth}"`);
+    }
+    if (opts.height != null) throw new UsageError('pass --height or --display-width, not both');
   }
 
   // Pixels after EXIF rotation, for the size and for picking the theme.
@@ -122,7 +135,9 @@ export async function stampImage(input, output, opts = {}) {
   }
   const { width: W, height: H } = info;
 
+  // With --display-width the label is also made at least DISPLAY_HEIGHT px tall as shown at that width.
   let height = opts.height ? Number(opts.height) : autoHeight(W, H);
+  if (displayWidth) height = Math.min(512, Math.max(height, Math.ceil((DISPLAY_HEIGHT * W) / displayWidth)));
   let label = renderLabel({ ...opts, height, theme: opts.theme === 'auto' || !opts.theme ? 'light' : opts.theme });
   // Shrink the label when it is wider than the image allows.
   const fits = (l) => l.width + l.height <= W && l.height * 2 <= H;
@@ -169,7 +184,18 @@ export async function stampImage(input, output, opts = {}) {
   return {
     output,
     image: { width: W, height: H },
-    label: { left, top, width: label.width, height: label.height, theme, position, separation: Math.round(separation(theme) * 100) / 100 },
+    label: {
+      left,
+      top,
+      width: label.width,
+      height: label.height,
+      theme,
+      position,
+      separation: Math.round(separation(theme) * 100) / 100,
+      // The narrowest display width at which the label is still `min` px tall (24, or 20 for minimal).
+      minDisplayWidth: Math.ceil((min * W) / label.height),
+      ...(displayWidth && { displayWidth, displayHeight: Math.round((label.height * displayWidth * 10) / W) / 10 }),
+    },
     alt: label.alt,
     ...(label.alt == null && { altMissing: ALT_MISSING }),
     disclosure: label.disclosure,
