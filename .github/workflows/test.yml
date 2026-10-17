@@ -1,0 +1,31 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install
+        run: npm ci
+      - name: Syntax check
+        shell: bash
+        run: find skills tools -name '*.mjs' -print0 | xargs -0 -n1 node --check
+      - name: Test
+        run: npm test

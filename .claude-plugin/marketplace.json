@@ -1,0 +1,15 @@
+{
+  "name": "ai-content-labels",
+  "description": "ai-content-labels: AI and human-made content labels built on the official EU icons",
+  "owner": {
+    "name": "JK-G",
+    "url": "https://github.com/JK-G"
+  },
+  "plugins": [
+    {
+      "name": "ai-content-labels",
+      "source": "./",
+      "description": "Label AI-generated and human-made content with the official EU icons: decide what the AI Act asks for, draw the label with WCAG contrast, burn it into images and get the alt text"
+    }
+  ]
+}

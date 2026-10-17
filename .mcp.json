@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ai-content-labels": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/skills/ai-content-labels/scripts/mcp-server.mjs"]
+    }
+  }
+}

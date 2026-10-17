@@ -1,0 +1,53 @@
+{
+  "name": "ai-content-labels",
+  "version": "0.1.0",
+  "description": "Label AI-generated and human-made content with the official EU icons: pick the label the AI Act asks for, draw it with WCAG contrast, burn it into images, and get the alt text. CLI, MCP server and agent skill.",
+  "type": "module",
+  "license": "MIT",
+  "author": "JK-G (https://github.com/JK-G)",
+  "homepage": "https://github.com/JK-G/ai-content-labels",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JK-G/ai-content-labels.git"
+  },
+  "bin": {
+    "ai-content-labels": "skills/ai-content-labels/scripts/ai-labels.mjs",
+    "ai-content-labels-mcp": "skills/ai-content-labels/scripts/mcp-server.mjs"
+  },
+  "files": [
+    "skills/",
+    ".claude-plugin/",
+    ".mcp.json",
+    "README.md",
+    "NOTICE.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "test": "node --test test/render.test.mjs test/decide.test.mjs test/cli.test.mjs",
+    "build-assets": "node tools/build-assets.mjs"
+  },
+  "optionalDependencies": {
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "opentype.js": "2.0.0"
+  },
+  "keywords": [
+    "ai-act",
+    "eu-ai-act",
+    "article-50",
+    "ai-label",
+    "ai-generated",
+    "ai-disclosure",
+    "content-labelling",
+    "human-made",
+    "wcag",
+    "accessibility",
+    "mcp",
+    "claude-code-plugin",
+    "agent-skill"
+  ]
+}
