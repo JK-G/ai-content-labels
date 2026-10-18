@@ -9,7 +9,9 @@ import { UsageError, parseBoolean } from './i18n.mjs';
 // AI images is good practice; opts.onlyIfRequired skips the stamp when the label is not a duty.
 
 // Options passed on to the stamp. kind, media and lang come from decide.
-const STAMP_OPTIONS = ['description', 'text', 'position', 'displayWidth', 'out', 'force', 'metadata', 'returnImage', 'minimal', 'theme', 'short', 'uppercase', 'inputBase64', 'mime'];
+const STAMP_OPTIONS = ['description', 'text', 'position', 'region', 'displayWidth', 'color', 'out', 'force', 'metadata', 'returnImage', 'minimal', 'short', 'full', 'theme', 'uppercase', 'inputBase64', 'mime'];
+// The form the caller chose wins over the one decide suggests.
+const FORM_OPTIONS = ['minimal', 'short', 'full'];
 
 export class NeedsAnswer extends UsageError {
   constructor(decision) {
@@ -44,7 +46,9 @@ export async function labelImage(input, opts = {}, policy = {}) {
     };
   }
   const stampOpts = Object.fromEntries(STAMP_OPTIONS.filter((k) => opts[k] != null).map((k) => [k, opts[k]]));
-  const { result, image } = await stampFrom({ ...stampOpts, ...decision.next.arguments, input: input ?? undefined }, policy);
+  const suggested = { ...decision.next.arguments };
+  if (FORM_OPTIONS.some((k) => opts[k] != null)) delete suggested.minimal;
+  const { result, image } = await stampFrom({ ...stampOpts, ...suggested, input: input ?? undefined }, policy);
   const notes = [];
   if (!decision.required) notes.push('The label is voluntary here and was stamped as good practice; pass only-if-required to skip voluntary labels.');
   if (decision.required && opts.creative && parseBoolean(opts.creative, 'creative')) {

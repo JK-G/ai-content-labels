@@ -3,7 +3,7 @@ name: ai-content-labels
 description: Label content as AI-generated, AI-modified or human-made with the official EU icons, and work out what Article 50 of the EU AI Act asks for. Use right after you generate or edit an image that will be published, and when the user asks to label, mark, tag, badge or disclose AI content or human-made content, in any wording or language (AI label, AI badge, "generated with AI" watermark, made by a human, AI Act labelling, Article 50 disclosure; Polish - oznacz jako AI, plakietka AI, oznaczenie treści AI, znak AI Act, stworzone przez człowieka), when they ask whether something must be labelled under the AI Act, and when an image, video, audio or text made or edited with AI is about to be published in a project that labels AI content. Labels an image in one call, draws HTML, SVG or PNG labels for pages and UI, and returns the alt text to publish with the content.
 license: MIT
 metadata:
-  version: "0.2.0"
+  version: "0.4.0"
   homepage: https://github.com/JK-G/ai-content-labels
 ---
 
@@ -45,10 +45,43 @@ node scripts/ai-labels.mjs label image.png --realistic --description "what it sh
 - `--modified` when you changed a real photo or a human-made image instead of making it from scratch.
 - It stamps a voluntary label too, because labelling AI images is good practice;
   `--only-if-required` skips the stamp when the AI Act does not require the label.
-- `--lang pl` for a Polish label; `--display-width 390` for an image shown full width on a phone;
-  `--out` for the output path (default `<name>.ai-label.<ext>` next to the image).
+- `--lang pl` for a Polish label; `--out` for the output path (default `<name>.ai-label.<ext>` next
+  to the image). Form, size, spot and colour follow the defaults in the next section: add `--region`
+  when only part of the image is AI, and `--color auto` for a branded graphic.
 - Then publish the `alt` it returns, as in step 4 below. For anything else (video, audio, text, an
   image someone else made, a human-made label) use the full workflow.
+
+## The smallest label, in the least invasive spot
+
+Always label in the smallest legible form that fits the case, in the spot where it covers the least,
+unless the user asks for something else or you have a stated reason. The tools do this by default, so
+mostly it means: do not override the defaults without a reason.
+
+- **Form.** A voluntary AI label is minimal: the EU "AI" disc and the content-type icons, with the
+  words in the alt text (`label` and `decide` set `--minimal` for you). A required label keeps one
+  word, the short default ("Generated", "Modified", the wording of the EU icons); make it minimal only
+  when a caption next to the content says the label sentence in words. Human-made labels keep their
+  words, because a hand alone is not a sign people know. `--full` ("Generated with AI") only when
+  the user asks for it.
+- **Size.** The automatic size is the smallest legible one: 24 px tall with text, 20 px minimal, as
+  the image is shown full width on a phone (390 CSS px). Do not pass `--height` to make it smaller.
+  Pass `--display-width` only when you know the width it is shown at: larger for a page that is never
+  seen on a phone, smaller for a grid of thumbnails.
+- **Place.** Leave `--position` at `auto`: the bottom-right corner when it is free, else the freer
+  of bottom centre and bottom left, else the top edge. The result says which spot it took and why
+  (`label.reason`, `label.spots`). Set `--position` only when the user asks, or when the platform
+  covers that spot (a story's reply bar at the bottom, for example).
+- **Part of an image.** When only one element of a composite is AI (a generated photo inside a
+  designed ad) and the label should mark that element, pass its box: `--region x,y,width,height` in
+  px or in % of the image (`50%,35%,46%,57%`). If you composed the graphic you know the box;
+  otherwise estimate it from the image. For a rounded or angled element (a photo in a shield or
+  circle), pass a box that lies inside it, or a corner of the box may fall outside the element. The
+  label goes on that element, in its least invasive spot;
+  use `--kind generated` for an element AI made whole.
+- **Colour.** Neutral (white or dark pill) by default. For a branded graphic, such as an ad or a
+  social post with a brand palette, use `--color auto`: the label takes the image's accent colour,
+  toned to keep 4.5:1 contrast. Use `--color #hex` when the user names a colour. Keep the default on
+  plain photos.
 
 ## Workflow
 
@@ -86,16 +119,14 @@ node scripts/ai-labels.mjs label image.png --realistic --description "what it sh
    - Image file: `stamp photo.jpg --kind generated --media image --lang pl --description "..."`.
      `--kind` is required: stamp never guesses the claim it burns in. For an image you made yourself, `label` does steps 2 and 3 at once. Writes `photo.ai-label.jpg`
      with the label in the pixels, keeps the EXIF and XMP of the original and adds an IPTC
-     DigitalSourceType to the XMP for generated and modified labels. The size and colour adapt to
-     the image; `--position` picks the corner (default top-left). It stamps one still file per run
-     and refuses to overwrite or to stamp a labelled file again unless you pass `--force`.
-   - Size for the screen: the automatic size is in the file's pixels. A 1600×1200 photo shown full
-     width on a phone (about 390 px) displays its label about 18 px tall. When the image will be shown
-     narrower than its own width (social feeds, stories, mobile articles), pass the display width:
-     `--display-width 390` makes the label at least 28 px tall as shown. The result's
-     `label.minDisplayWidth` says the narrowest width at which the label stays 24 px tall. For
-     social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then stamp
-     with `--display-width 390`, so the label sits inside every crop.
+     DigitalSourceType to the XMP for generated and modified labels. Form, size, spot and colour
+     follow the defaults above. It stamps one still file per run and refuses to overwrite or to
+     stamp a labelled file again unless you pass `--force`.
+   - For social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then
+     stamp, so the label sits inside every crop. The result's `label.displayHeight` says how tall
+     the label looks on a phone. A `warning` in the result means the label had to shrink to fit (a wide
+     banner, a small region): tell the user, and use `--minimal`, a larger region or a label next to
+     the image.
    - A folder of images: run `decide` once per distinct kind of content, then stamp each file with
      its own `--description`, and report one table: file, output, alt text.
    - Web page or app: use `render --format html` (real text: zooms, reflows, translates) and put
@@ -141,7 +172,7 @@ node scripts/ai-labels.mjs label image.png --realistic --description "what it sh
 | AI was involved and you want your own wording | `--kind basic --text "Voice generated with AI"` |
 | Made by a person, confirmed by the user | `--kind human --media text,image`. If the person wants to place the label by hand, point them to the ready-made files in `labels/human-made` of the repository (or the `human-made-labels.zip` release asset) instead |
 | AI image with a human-written text | `--kind generated --media image --human text` |
-| A human-made layout, mockup or collage containing an AI-generated element | Run decide with `--realistic` for the element. If the post is about the visualisation, crop to the AI element and stamp that; if it shows the whole design, use `--kind modified --media image` with `--description` naming the AI part |
+| A human-made layout, mockup or collage containing an AI-generated element | Run decide with `--realistic` for the element. To mark just that element, stamp the whole graphic with `--kind generated --media image --region <the element's box>`; if the post is about the visualisation, crop to the element and stamp that; to label the design as a whole, use `--kind modified --media image` with `--description` naming the AI part |
 
 - `--media` lists only the parts that are AI (or, with `--kind human`, the parts made by a person).
   A type cannot be in both `--media` and `--human`.
@@ -149,13 +180,12 @@ node scripts/ai-labels.mjs label image.png --realistic --description "what it sh
   another EU language pass `--lang` with `--text` in that language (plain words, no abbreviation
   other than "AI"), e.g. `--lang de --text "Mit KI generiert"`. The sentence is then your text
   alone, so name the part in it ("Stimme mit KI generiert").
-- `--short` gives the compact wording ("Generated"), useful for two labels side by side.
-- `--minimal` drops the text: the author mark (EU "AI" disc, or a hand in the same disc) plus the content-type icons.
-  Use it only when the user asks for it or the spot is too small for text (thumbnails, avatars, UI
-  chips; labels with text need at least 24 px, minimal ones 20 px). When `decide` says the label
-  is required, keep the full form, or use the minimal one and put the label sentence in a visible
-  caption. Without text, "generated" and "modified" look the same, so the alt text must carry the
-  difference.
+- The short wording ("Generated") is the default; `--full` gives "Generated with AI".
+- `--minimal` drops the text: the author mark (EU "AI" disc, or a hand in the same disc) plus the
+  content-type icons. It is the form for voluntary labels and for spots too small for text
+  (thumbnails, avatars, UI chips; labels with text need at least 24 px, minimal ones 20 px). For a
+  required label, use it only with the label sentence in a visible caption. Without text,
+  "generated" and "modified" look the same, so the alt text must carry the difference.
 - The hand mark is this project's design, not an EU icon. It has no meaning under the AI Act.
   Where you use it, explain it once (a legend, caption or an "about our labels" page).
 - The untouched EU files: `eu generated --variant black --out ai-generated.svg` (also `basic`,
@@ -168,8 +198,8 @@ node scripts/ai-labels.mjs label image.png --realistic --description "what it sh
 - Do not put a human-made label on anything generative AI produced or changed, and do not infer it.
 - Do not use the EU transparent variants on top of photos; their letters can drop below WCAG
   contrast there. Labels drawn by this tool keep 4.5:1 text contrast on any backdrop.
-- Do not shrink a stamped label below its automatic size, cover it with other UI, animate it
-  (WCAG 2.2.2) or make it flash (WCAG 2.3.1).
+- Do not shrink a stamped label below its automatic size (it is already the smallest legible one),
+  cover it with other UI, animate it (WCAG 2.2.2) or make it flash (WCAG 2.3.1).
 - Stamping changes the pixels, so an existing C2PA manifest stops verifying. If the file had one,
   tell the user to sign it again after stamping.
 

@@ -36,16 +36,21 @@ Label options (render, stamp, alt)
   --human-text "..."     your own text for the human-made part
   --description "..."    what the image shows, one short phrase; goes before the
                          label sentence in the alt text
-  --short                compact wording ("Generated" instead of "Generated with AI")
-  --uppercase            upper case with letter spacing, like the EU icons
+  The form is the smallest that fits the case, unless you pick one:
+  --short                one word next to the EU "AI" disc ("Generated", "Modified",
+                         the wording of the EU icons); the default
+  --full                 the full wording ("Generated with AI")
   --minimal              no text: only the author mark (the EU "AI" disc, or a hand
-                         in the same disc) and the content-type icons
+                         in the same disc) and the content-type icons; label uses it
+                         for voluntary labels
+  --uppercase            upper case with letter spacing, like the EU icons
   --theme light|dark     light = white pill with dark text; stamp also accepts auto
                          (default there)
+  --color <hex>          a pill in your colour, e.g. #1f7a52; the text turns white or
+                         dark to keep 4.5:1 contrast. stamp and label also take auto:
+                         the image's accent colour, toned to keep 4.5:1
   --height <px>          whole px, default 32, at least 24 with text and 20 with --minimal;
-                         stamp picks about 6% of the shorter side and at least 2.5%
-                         of the longer side, never below 28 px or above 512 px
-                         (in the file's pixels; see --display-width)
+                         stamp picks the smallest legible size (see --display-width)
   --background-opacity <0-1>
                          refused below the level that keeps 4.5:1 text contrast
                          (override with --allow-low-contrast)
@@ -59,11 +64,15 @@ render options
 
 stamp options
   --out <file>           default <name>.ai-label.<ext> next to the input
-  --position top-left|top-right|bottom-left|bottom-right   default top-left
-  --display-width <px>   how wide the image will be shown, in CSS px; the label is made
-                         at least 28 px tall at that width. Use 390 for an image shown
-                         full width on a phone (feed posts, stories, mobile articles):
-                         a 1080 px wide post then gets a 78 px label instead of 65
+  --position auto|bottom-right|bottom-center|bottom-left|top-right|top-center|top-left
+                         default auto: the least invasive free spot, bottom right
+                         first, then bottom centre or bottom left, then the top edge
+  --region x,y,w,h       the AI part of a larger graphic (px, or % of the image, e.g.
+                         50%,35%,46%,57%); the label goes on that part
+  --display-width <px>   how wide the image will be shown, in CSS px; default 390, full
+                         width on a phone. The label is the smallest legible there:
+                         24 px tall with text, 20 px with --minimal (a 1080 px wide
+                         image gets 67 px, or 56 px minimal)
   --no-metadata          skip the IPTC DigitalSourceType tag; the small ai-content-labels
                          marker that prevents double stamping is always written
   --force                overwrite an existing output, or stamp a labelled file again
@@ -75,9 +84,11 @@ label options
   --creative             an evidently artistic, satirical or fictional work
   --only-if-required     stamp only when the AI Act requires the label; by default a
                          voluntary label is stamped too
-  --lang, --text, --description, --position, --display-width, --out, --force,
-  --no-metadata          as for stamp; <image> is a file path or an http(s) URL
-                         (a URL needs --out)
+  --lang, --text, --description, --position, --region, --display-width, --color,
+  --minimal, --short, --full, --out, --force, --no-metadata
+                         as for stamp; <image> is a file path or an http(s) URL
+                         (a URL needs --out). A voluntary label is minimal unless you
+                         pick a form
 
 init options
   --write                append the block to the file instead of printing it; run again
@@ -107,18 +118,18 @@ Other
   --json                 machine-readable output
 `;
 
-const BOOLEAN = new Set(['modified', 'only-if-required', 'write', 'short', 'uppercase', 'minimal', 'json', 'allow-low-contrast', 'realistic', 'creative', 'public-interest', 'editorial-review', 'explain', 'metadata', 'force', 'css', 'help']);
-const LABEL = ['kind', 'media', 'human', 'lang', 'text', 'human-text', 'description', 'short', 'uppercase', 'minimal', 'theme', 'height', 'background-opacity', 'allow-low-contrast'];
+const BOOLEAN = new Set(['modified', 'only-if-required', 'write', 'short', 'full', 'uppercase', 'minimal', 'json', 'allow-low-contrast', 'realistic', 'creative', 'public-interest', 'editorial-review', 'explain', 'metadata', 'force', 'css', 'help']);
+const LABEL = ['kind', 'media', 'human', 'lang', 'text', 'human-text', 'description', 'short', 'full', 'uppercase', 'minimal', 'theme', 'color', 'height', 'background-opacity', 'allow-low-contrast'];
 // The options each command accepts; anything else is a typo and must not pass silently.
 const OPTIONS = {
   render: [...LABEL, 'out', 'scale', 'format', 'css'],
-  stamp: [...LABEL, 'out', 'position', 'display-width', 'metadata', 'force'],
+  stamp: [...LABEL, 'out', 'position', 'region', 'display-width', 'metadata', 'force'],
   alt: LABEL,
   decide: ['media', 'origin', 'realistic', 'creative', 'public-interest', 'editorial-review', 'lang', 'explain'],
   eu: ['variant', 'out', 'scale', 'height'],
   icons: ['out'],
   doctor: [],
-  label: ['realistic', 'modified', 'creative', 'lang', 'text', 'description', 'position', 'display-width', 'out', 'only-if-required', 'force', 'metadata'],
+  label: ['realistic', 'modified', 'creative', 'lang', 'text', 'description', 'position', 'region', 'display-width', 'color', 'minimal', 'short', 'full', 'out', 'only-if-required', 'force', 'metadata'],
   init: ['write', 'file'],
 };
 const camel = (s) => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
@@ -157,16 +168,22 @@ const altLines = (r) =>
   `disclosure: ${r.disclosure}\n` + (r.alt ? `alt: ${r.alt}\n` : r.altMissing ? 'alt: add --description "what the image shows" to get the full alt text\n' : '');
 
 // How big the label looks where the image is shown: a phone does not display file pixels 1:1.
-function displayLine(r, minimal) {
+function displayLine(r) {
   const l = r.label;
-  const floor = minimal ? 20 : 24;
-  if (l.displayWidth) {
-    const small = l.displayHeight < floor ? ` (under ${floor} px: the image is too narrow for a larger label)` : '';
-    return `display: ${l.displayHeight} px tall when the image is shown ${l.displayWidth} px wide${small}\n`;
-  }
-  const phone = l.minDisplayWidth > PHONE_WIDTH ? `; shown narrower, as on a phone, it is smaller: pass --display-width ${PHONE_WIDTH}` : '';
-  return `display: ${floor} px tall or more when the image is shown ${l.minDisplayWidth} px wide or wider${phone}\n`;
+  const floor = l.form === 'minimal' ? 20 : 24;
+  const where = l.displayWidth === PHONE_WIDTH ? ' (full width on a phone; --display-width for other sizes)' : '';
+  const small = l.displayHeight < floor ? `, under the legible ${floor} px` : '';
+  return `display: ${l.displayHeight} px tall when the image is shown ${l.displayWidth} px wide${where}${small}\n`;
 }
+
+// "bottom-right (auto: bottom-right is free)", "#1b7a52 pill (auto, from #22a06b)", "light pill".
+const placeText = (l) => (l.placement === 'auto' ? `${l.position} (auto: ${l.reason})` : l.position);
+const pillText = (l) => (l.color ? `${l.color.background} pill${l.color.source === 'auto' ? ` (auto, from ${l.color.accent})` : ''}` : `${l.theme} pill`);
+const labelLine = (r) =>
+  `label: ${r.label.width}×${r.label.height} px, ${r.label.form}, ${pillText(r.label)}, ${placeText(r.label)}, ` +
+  `${contrastLine(r, r.label.form === 'minimal', ' ')}, stands out ${r.label.separation.toFixed(2)}:1 from the image\n` +
+  (r.label.colorNote ? `color: ${r.label.colorNote}\n` : '') +
+  (r.warning ? `warning: ${r.warning}\n` : '');
 
 // "text contrast 12.55:1", with a warning when --allow-low-contrast let a label below 4.5:1 through.
 const contrastLine = (r, minimal, sep) => `${minimal ? 'mark' : 'text'} contrast${sep}${r.contrast.toFixed(2)}:1${r.wcag ? '' : ' (below WCAG 1.4.3, 4.5:1)'}`;
@@ -218,9 +235,9 @@ async function main(argv) {
       print(
         result,
         (r) =>
-          `${r.output}\nlabel: ${r.label.width}×${r.label.height} px, ${r.label.theme} pill, ${r.label.position}, ` +
-          `${contrastLine(r, minimal, ' ')}, stands out ${r.label.separation.toFixed(2)}:1 from the image\n` +
-          displayLine(r, minimal) +
+          `${r.output}\n` +
+          labelLine(r) +
+          displayLine(r) +
           altLines(r) +
           (r.metadata ? `metadata: ${r.metadata}\n` : '')
       );
@@ -244,9 +261,9 @@ async function main(argv) {
         !x.stamped
           ? `${x.verdict}\nNot stamped: the label is voluntary here and --only-if-required is set.\n${x.disclosure ? `disclosure: ${x.disclosure}\n` : ''}`
           : `${x.verdict}${x.required ? '' : ' (stamped anyway: labelling AI images is good practice; --only-if-required skips it)'}\n` +
-            `${x.output}\nlabel: ${x.label.width}×${x.label.height} px, ${x.label.theme} pill, ${x.label.position}, ` +
-            `${contrastLine(x, minimal, ' ')}, stands out ${x.label.separation.toFixed(2)}:1 from the image\n` +
-            displayLine(x, minimal) +
+            `${x.output}\n` +
+            labelLine(x) +
+            displayLine(x) +
             altLines(x) +
             (x.metadata ? `metadata: ${x.metadata}\n` : '')
       );

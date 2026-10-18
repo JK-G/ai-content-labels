@@ -3,6 +3,8 @@ import { euBasic, mediaIcons, handMark, euFile } from './assets.mjs';
 import { textPaths, measure, capHeight, missingGlyphs, round } from './text.mjs';
 import { worstCaseContrast, WCAG } from './contrast.mjs';
 import { strings, sentence, parseBoolean, hasWording, noWording, KINDS, MEDIA, UsageError } from './i18n.mjs';
+import { parseColor, colorTheme } from './color.mjs';
+export { POSITIONS } from './place.mjs';
 
 export const THEMES = {
   light: { background: '#ffffff', backgroundOpacity: 0.94, ink: '#1d1d1b', border: '#1d1d1b', borderOpacity: 0.14, eu: 'black' },
@@ -13,16 +15,23 @@ export const THEMES = {
 // the white file a white disc with #1d1d1b letters.
 export const EU_COLORS = { black: ['#000000', '#ffffff'], white: ['#ffffff', '#1d1d1b'] };
 
-export const POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-
 const toList = (v) => (v == null || v === '' ? [] : Array.isArray(v) ? v : String(v).split(',')).map((s) => String(s).trim()).filter(Boolean);
 
 // Trimmed and NFC-normalised, so "é" typed as e + combining accent (macOS paste) finds its glyph.
 const clean = (v) => (v == null ? undefined : String(v).normalize('NFC').trim());
 const bool = (input, key, name) => parseBoolean(input[key], name) ?? false;
 
+// The forms of a label, smallest first: the author mark and icons alone, the mark with one word
+// ("Generated", "Modified", the wording of the EU icons), and the full wording ("Generated with AI").
+export const FORMS = ['minimal', 'short', 'full'];
+
 export function normalize(input = {}) {
   const height = Number(input.height ?? 32);
+  const minimal = parseBoolean(input.minimal, '--minimal');
+  const short = parseBoolean(input.short, '--short');
+  const full = parseBoolean(input.full, '--full');
+  if (full && (minimal || short)) throw new UsageError(`--full and --${minimal ? 'minimal' : 'short'} contradict; pick one form`);
+  if (short && minimal) throw new UsageError('--short and --minimal contradict; pick one form');
   if (Number.isNaN(height)) throw new UsageError('--height must be a number of px');
   if (!Number.isInteger(height)) throw new UsageError('--height must be a whole number of px (half pixels blur the label)');
   const o = {
@@ -33,11 +42,14 @@ export function normalize(input = {}) {
     text: clean(input.text),
     humanText: clean(input.humanText),
     description: clean(input.description) || undefined,
-    short: bool(input, 'short', '--short'),
+    // The short wording unless the full one is asked for: the smallest text that still says
+    // generated or modified.
+    short: full || short === false ? false : true,
     uppercase: bool(input, 'uppercase', '--uppercase'),
     theme: input.theme ?? 'light',
     height,
-    minimal: bool(input, 'minimal', '--minimal'),
+    minimal: minimal ?? false,
+    color: parseColor(input.color),
     backgroundOpacity: input.backgroundOpacity == null ? undefined : Number(input.backgroundOpacity),
     allowLowContrast: bool(input, 'allowLowContrast', '--allow-low-contrast'),
     metadata: parseBoolean(input.metadata, '--metadata') ?? true,
@@ -53,6 +65,9 @@ export function normalize(input = {}) {
   const both = o.media.filter((m) => o.human.includes(m));
   if (both.length) throw new UsageError(`${both.join(', ')} is in both --media and --human; a part is either AI or human-made`);
   if (!THEMES[o.theme]) throw new UsageError(`unknown theme "${o.theme}"; use light or dark`);
+  if (o.color === 'auto') throw new UsageError('--color auto matches the colours of an image, so it works with stamp and label; here pass a hex colour such as #1f7a52');
+  if (o.color && input.theme != null && input.theme !== 'auto') throw new UsageError('pass --theme or --color, not both');
+  o.form = o.minimal ? 'minimal' : o.short ? 'short' : 'full';
   // Text below 24 px tall is set at 6-8 px and nobody reads it; the minimal form has no text.
   const min = o.minimal ? 20 : 24;
   if (!(o.height >= min && o.height <= 512)) {
@@ -73,7 +88,7 @@ export function normalize(input = {}) {
 // Renders a label. Returns the SVG, its size, the sentence for alt text, and the contrast it guarantees.
 export function renderLabel(input) {
   const o = normalize(input);
-  const theme = { ...THEMES[o.theme], ...(o.backgroundOpacity != null && { backgroundOpacity: o.backgroundOpacity }) };
+  const theme = { ...(o.color ? colorTheme(o.color) : THEMES[o.theme]), ...(o.backgroundOpacity != null && { backgroundOpacity: o.backgroundOpacity }) };
   const contrast = worstCaseContrast(theme);
   if (contrast < WCAG.text && !o.allowLowContrast) {
     throw new UsageError(

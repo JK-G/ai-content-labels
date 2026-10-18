@@ -71,7 +71,9 @@ test('stamp burns the label in, tags the file and returns alt text', { skip: !sh
   assert.ok(existsSync(result.output));
   assert.equal(result.alt, null);
   assert.equal(result.label.theme, 'dark'); // light image, dark label
-  assert.equal(result.label.height, 48); // 6% of the shorter side
+  assert.equal(result.label.height, 74); // legible on a phone: 24 px as shown 390 px wide
+  assert.equal(result.label.position, 'bottom-right');
+  assert.equal(result.label.form, 'short');
   assert.equal(result.disclosure, 'Generated with AI: image.');
   const meta = await sharp(result.output).metadata();
   assert.match(meta.xmp.toString(), /trainedAlgorithmicMedia/);
@@ -159,8 +161,10 @@ test('mistyped options are refused instead of ignored', () => {
 });
 
 test('boolean options accept =false', () => {
-  assert.equal(cli('render', '--short=false').stdout, cli('render').stdout);
-  assert.notEqual(cli('render', '--short=true').stdout, cli('render').stdout);
+  // The short wording is the default; --short=false is the full one, like --full.
+  assert.equal(cli('render', '--short=true').stdout, cli('render').stdout);
+  assert.notEqual(cli('render', '--short=false').stdout, cli('render').stdout);
+  assert.equal(cli('render', '--short=false').stdout, cli('render', '--full').stdout);
   assert.equal(cli('render', '--short=maybe').status, 2);
 });
 
@@ -252,7 +256,7 @@ test('render validates text, scale and format, and reports the pixel size', { sk
   assert.match(blank.stderr, /--text is empty/);
   assert.equal(cli('render', '--scale', '0').status, 2);
   assert.equal(cli('render', '--scale', 'abc').status, 2);
-  const png = cli('render', '--media', 'image', '--out', join(tmp, 'scaled.png'), '--scale', '3');
+  const png = cli('render', '--media', 'image', '--full', '--out', join(tmp, 'scaled.png'), '--scale', '3');
   assert.equal(png.status, 0, png.stderr);
   assert.match(png.stdout, /\(573×96 px, displays at 191×32\)/);
   assert.match(png.stdout, /^text contrast: 14\.78:1$/m);
@@ -361,7 +365,7 @@ test('stamp summary: pill colour, mark contrast for minimal, a WCAG warning belo
   await sharp({ create: { width: 900, height: 600, channels: 3, background: '#30343a' } }).png().toFile(input);
   const minimal = cli('stamp', input, '--kind', 'generated', '--media', 'image', '--minimal', '--out', join(tmp, 'summary-min.png'));
   assert.equal(minimal.status, 0, minimal.stderr);
-  assert.match(minimal.stdout, /light pill, top-left, mark contrast 14\.78:1/);
+  assert.match(minimal.stdout, /minimal, light pill, bottom-right \(auto: bottom-right is free\), mark contrast 14\.78:1/);
   assert.doesNotMatch(minimal.stdout, /text contrast/);
   const low = cli('stamp', input, '--kind', 'generated', '--media', 'image', '--background-opacity', '0.3', '--allow-low-contrast', '--out', join(tmp, 'summary-low.png'));
   assert.match(low.stdout, /\(below WCAG 1\.4\.3, 4\.5:1\)/);
@@ -374,9 +378,9 @@ test('stamp reports how big the label looks where the image is shown', { skip: !
   await sharp({ create: { width: 720, height: 1280, channels: 3, background: '#223' } }).png().toFile(input);
   const plain = cli('stamp', input, '--kind', 'human', '--media', 'image');
   assert.equal(plain.status, 0, plain.stderr);
-  assert.match(plain.stdout, /^display: 24 px tall or more when the image is shown 402 px wide or wider; shown narrower, as on a phone, it is smaller: pass --display-width 390$/m);
-  const phone = cli('stamp', input, '--kind', 'human', '--media', 'image', '--display-width', '390', '--out', join(tmp, 'story-phone.png'));
-  assert.equal(phone.status, 0, phone.stderr);
-  assert.match(phone.stdout, /^display: 28\.2 px tall when the image is shown 390 px wide$/m);
+  assert.match(plain.stdout, /^display: 24\.4 px tall when the image is shown 390 px wide \(full width on a phone; --display-width for other sizes\)$/m);
+  const desktop = cli('stamp', input, '--kind', 'human', '--media', 'image', '--display-width', '720', '--out', join(tmp, 'story-desktop.png'));
+  assert.equal(desktop.status, 0, desktop.stderr);
+  assert.match(desktop.stdout, /^display: 24 px tall when the image is shown 720 px wide$/m);
   assert.match(cli('help').stdout, /--display-width <px>/);
 });

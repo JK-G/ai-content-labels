@@ -7,6 +7,7 @@ import { isUrl, fetchImage, decodeBase64 } from './source.mjs';
 import { decide } from './decide.mjs';
 import { UsageError, sentence, parseBoolean } from './i18n.mjs';
 import { ASSETS_DIR, mediaIcons } from './assets.mjs';
+import { parseColor } from './color.mjs';
 
 // The operations behind both the CLI and the MCP server.
 
@@ -78,7 +79,8 @@ function requireKind(opts) {
     );
   }
   // Label options first: a contradictory label is the user's first problem, not an existing output.
-  normalize({ ...opts, height: opts.height ?? 32 });
+  // auto colour and theme are resolved from the image later; here only the label is checked.
+  normalize({ ...opts, height: opts.height ?? 32, color: parseColor(opts.color) === 'auto' ? undefined : opts.color, theme: opts.theme === 'auto' ? undefined : opts.theme });
 }
 
 export async function stamp(input, opts = {}) {

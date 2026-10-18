@@ -6,7 +6,7 @@ import { contrastRatio, parseHex } from '../skills/ai-content-labels/scripts/lib
 const strip = (html) => html.replace(/<svg[\s\S]*?<\/svg>/g, '');
 
 test('the HTML label is real text with the full sentence for screen readers', () => {
-  const { html, disclosure } = renderHtml({ kind: 'generated', media: 'image', human: 'text' });
+  const { html, disclosure } = renderHtml({ kind: 'generated', media: 'image', human: 'text', full: true });
   assert.match(html, /^<span class="ai-label" role="note" lang="en">/);
   assert.match(strip(html), />Generated with AI</);
   assert.match(strip(html), />Made by a human</);
@@ -71,7 +71,7 @@ test('narrow columns wrap whole words and move the icons under them', () => {
   // Type floors: 12 px for the label, 10 px for spaced capitals.
   assert.match(LABEL_CSS, /font:600 max\(\.875em,12px\)/);
   assert.match(LABEL_CSS, /\.ai-label-upper \.ai-label-text\{[^}]*font-size:max\(\.85em,10px\)/);
-  const { html } = renderHtml({ kind: 'modified', media: 'image,voice', lang: 'pl' });
+  const { html } = renderHtml({ kind: 'modified', media: 'image,voice', lang: 'pl', full: true });
   assert.match(html, /<\/svg><span class="ai-label-body"><span class="ai-label-text">Zmodyfikowane przez AI<\/span><span class="ai-label-media">/);
   // A bare minimal badge has no body, so no gap after the mark.
   assert.doesNotMatch(renderHtml({ minimal: true }).html, /ai-label-body/);
@@ -99,4 +99,18 @@ test('own text in another EU language is tagged with that language and read alon
   assert.equal(disclosure, 'Généré par IA.');
   assert.equal(spoken(html), 'Généré par IA.');
   assert.throws(() => renderHtml({ lang: 'fr', media: 'image' }), /no built-in wording for "fr"/);
+});
+
+test('the short default shows one word and reads the full sentence', () => {
+  const { html } = renderHtml({ kind: 'generated', media: 'image' });
+  assert.match(strip(html), /<span class="ai-label-text">Generated<\/span>/);
+  assert.match(html, /<span class="ai-label-sr"> with AI: image\.<\/span>/);
+});
+
+test('a label colour sets the custom properties on the label, with ink that keeps 4.5:1', () => {
+  const { html } = renderHtml({ kind: 'generated', media: 'image', color: '#1f7a52' });
+  assert.match(html, /style="--ai-label-bg:#1f7a52;--ai-label-ink:#ffffff;[^"]*--ai-label-disc:#ffffff;--ai-label-glyph:#1d1d1b"/);
+  assert.doesNotMatch(html, /data-theme/);
+  assert.match(renderHtml({ color: '#ffd400' }).html, /--ai-label-ink:#1d1d1b/);
+  assert.throws(() => renderHtml({ color: '#ffd400', theme: 'dark' }), /--theme or --color/);
 });

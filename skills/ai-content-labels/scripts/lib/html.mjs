@@ -1,5 +1,7 @@
 import { euBasic, mediaIcons, handMark } from './assets.mjs';
-import { normalize, xml, composeAlt, altMissing, HAND_RATIO } from './render.mjs';
+import { normalize, xml, composeAlt, altMissing, HAND_RATIO, EU_COLORS } from './render.mjs';
+import { colorTheme } from './color.mjs';
+import { parseHex } from './contrast.mjs';
 import { strings, sentence } from './i18n.mjs';
 import { round } from './text.mjs';
 
@@ -40,12 +42,21 @@ export function renderHtml(input = {}) {
   const pick = (kind) => (o.short ? s[kind].short : s[kind].label);
   const pills = [pill({ kind: o.kind, text: o.text ?? pick(o.kind), media: o.media, own: o.text, o })];
   if (o.kind !== 'human' && o.human.length) pills.push(pill({ kind: 'human', text: o.humanText ?? pick('human'), media: o.human, own: o.humanText, o }));
-  const theme = input.theme === 'light' || input.theme === 'dark' ? ` data-theme="${input.theme}"` : '';
+  const theme = o.color ? ` style="${colorVars(o.color)}"` : input.theme === 'light' || input.theme === 'dark' ? ` data-theme="${input.theme}"` : '';
   const cls = o.uppercase ? 'ai-label ai-label-upper' : 'ai-label';
   const html = `<span class="${cls}" role="note" lang="${o.lang}"${theme}>${pills.map((p) => p.html).join(' ')}</span>`;
   const disclosure = pills.map((p) => p.sentence).join(' ');
   const alt = composeAlt(o);
   return { html, css: LABEL_CSS, alt, ...altMissing(o, alt), disclosure };
+}
+
+// A label colour (--color) as the stylesheet's custom properties, set on the label itself so they
+// win over the light and dark ones; forced-colors mode still replaces them.
+function colorVars(hex) {
+  const t = colorTheme(hex);
+  const rgb = parseHex(t.ink).join(' ');
+  const [disc, glyph] = EU_COLORS[t.eu];
+  return `--ai-label-bg:${t.background};--ai-label-ink:${t.ink};--ai-label-line:rgb(${rgb}/${t.borderOpacity});--ai-label-rule:rgb(${rgb}/.35);--ai-label-disc:${disc};--ai-label-glyph:${glyph}`;
 }
 
 function pill({ kind, text, media, own, o }) {

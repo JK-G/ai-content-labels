@@ -42,14 +42,19 @@ test('mergeXmp starts a packet when there is none or it is unreadable', () => {
   assert.equal(mergeXmp('garbage', 'generated'), digitalSourceXmp('generated'));
 });
 
-test('auto height: 6% of the shorter side, 2.5% of the longer, between 28 and 512 px', () => {
-  assert.equal(autoHeight(720, 1280), 43);
-  assert.equal(autoHeight(1600, 240), 40);
-  assert.equal(autoHeight(1080, 1080), 65);
-  assert.equal(autoHeight(1600, 1200), 72);
-  assert.equal(autoHeight(300, 200), 28);
-  assert.equal(autoHeight(12000, 12000), 512);
-  assert.doesNotThrow(() => renderLabel({ height: autoHeight(12000, 12000) }));
+test('auto height: the smallest legible size full width on a phone, 24 px with text, 20 minimal, up to 512', () => {
+  assert.equal(autoHeight(1080), 67); // ceil(24 × 1080 / 390)
+  assert.equal(autoHeight(1080, { minimal: true }), 56);
+  assert.equal(autoHeight(1600), 99);
+  // Narrower than a phone: shown 1:1, so the legible size itself.
+  assert.equal(autoHeight(300), 24);
+  assert.equal(autoHeight(200, { minimal: true }), 20);
+  // Shown wider than the phone: smaller in the file, never below the legible size.
+  assert.equal(autoHeight(1080, { displayWidth: 1080 }), 24);
+  assert.equal(autoHeight(12000), 512);
+  // The 0.3 call shape (width, height) still works.
+  assert.equal(autoHeight(1080, 1080), 67);
+  assert.doesNotThrow(() => renderLabel({ height: autoHeight(12000) }));
 });
 
 test('mergeXmp marks the file as visibly labelled, once', () => {
@@ -161,20 +166,21 @@ test('a label with text needs 24 px; minimal stamps go down to 20', { skip: !sha
   assert.equal(r.label.height, 20);
 });
 
-test('--display-width sizes the label for the width the image is shown at', { skip: !sharp && 'sharp not installed' }, async () => {
-  // A 1080 px feed post shown full width on a 390 px phone: 65 px by default, 18 px as displayed.
+test('the label is the smallest legible size where the image is shown, a phone by default', { skip: !sharp && 'sharp not installed' }, async () => {
+  // A 1080 px feed post shown full width on a 390 px phone: 67 px in the file, 24 px as shown.
   const post = await flat('post.png', 200, 1080, 1350);
   const plain = await stamp(post, { kind: 'generated', media: 'image', out: join(tmp, 'post-a.png') });
-  assert.equal(plain.label.height, 65);
-  assert.equal(plain.label.minDisplayWidth, Math.ceil((24 * 1080) / 65));
-  assert.equal(plain.label.displayWidth, undefined);
-  const phone = await stamp(post, { kind: 'generated', media: 'image', displayWidth: 390, out: join(tmp, 'post-b.png') });
-  assert.equal(phone.label.height, 78); // ceil(28 * 1080 / 390)
-  assert.equal(phone.label.displayWidth, 390);
-  assert.ok(phone.label.displayHeight >= 28);
-  // Never smaller than the automatic size: a wide display keeps it.
+  assert.equal(plain.label.height, 67);
+  assert.equal(plain.label.form, 'short');
+  assert.equal(plain.label.displayWidth, 390);
+  assert.ok(plain.label.displayHeight >= 24 && plain.label.displayHeight < 25);
+  assert.equal(plain.label.minDisplayWidth, Math.ceil((24 * 1080) / 67));
+  const minimal = await stamp(post, { kind: 'generated', media: 'image', minimal: true, out: join(tmp, 'post-b.png') });
+  assert.equal(minimal.label.height, 56);
+  assert.ok(minimal.label.displayHeight >= 20);
+  // Shown wider than on a phone (a desktop-only page): smaller in the file, never below 24 px.
   const wide = await stamp(post, { kind: 'generated', media: 'image', displayWidth: 1080, out: join(tmp, 'post-c.png') });
-  assert.equal(wide.label.height, 65);
+  assert.equal(wide.label.height, 24);
   await assert.rejects(stamp(post, { kind: 'generated', displayWidth: 390, height: 40, out: join(tmp, 'post-d.png') }), /--height or --display-width, not both/);
   await assert.rejects(stamp(post, { kind: 'generated', displayWidth: '39.5', out: join(tmp, 'post-e.png') }), /whole CSS px/);
 });

@@ -91,7 +91,8 @@ test('decide_label returns "unknown" with a question when a deciding fact is mis
   assert.doesNotMatch(unknown.question, /--/);
   assert.equal(json(r[2]).required, false);
   assert.equal(unknown.next, undefined);
-  assert.deepEqual(json(r[2]).next.arguments, { kind: 'generated', media: ['image'], lang: 'en' });
+  // A voluntary label: the smallest form.
+  assert.deepEqual(json(r[2]).next.arguments, { kind: 'generated', media: ['image'], lang: 'en', minimal: true });
 });
 
 test('decide_label hands over the next call: tool, arguments to pass unchanged, arguments to fill in', async () => {

@@ -161,7 +161,7 @@ export function decide(input = {}) {
   const placement = {
     image: [
       'Burn the label into the image pixels (the `stamp` command), so it stays visible when the image is downloaded or reshared.',
-      "Use a corner where platforms do not draw their own buttons or captions; the label must be visible at first sight, with nothing covering it. For social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then stamp with --display-width 390, so the label sits inside every crop and is readable full width on a phone.",
+      "stamp puts the label in the least invasive spot, with nothing covering it: the bottom-right corner when it is free, else the bottom centre or bottom left, else the top edge. If only part of the image is AI (a generated photo inside a designed graphic), pass --region with that part's box and the label goes on that part. For social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then stamp, so the label sits inside every crop; the automatic size is the smallest that stays legible full width on a phone.",
     ],
     video: [
       'Show the label from the first frame, repeat it at regular intervals where possible and at least after every break (such as an ad break), so people who join mid-way still see it (Code Sub-measure 1.2.2(b); Guidelines para 143). The Code also encourages keeping it on screen for the whole video or the whole AI part; this project recommends that, as the simplest way to cover every viewer.',
@@ -185,12 +185,18 @@ export function decide(input = {}) {
 }
 
 // The command to run after decide: the MCP tool with the arguments to pass unchanged, the arguments
-// still to fill in (MCP names), and the same step as a CLI line. `ai-labels` is the package's command
+// still to fill in (MCP names), and the same step as a CLI line. A voluntary AI label takes the
+// smallest form (minimal: the EU disc and the content-type icons); a required or human-made one keeps
+// a word, the default short form. `ai-labels` is the package's command
 // (also installed as `ai-content-labels`); in a copied skill it is node <skill>/scripts/ai-labels.mjs.
-export function nextStep(label, disclosure) {
+export function nextStep(label, disclosure, { minimal = false } = {}) {
   const own = disclosure == null; // no built-in wording: the user writes the label text
   const flags =
-    `--kind ${label.kind} --media ${label.media.join(',')}` + (label.lang !== 'en' ? ` --lang ${label.lang}` : '') + (own ? ' --text "label in that language"' : '');
+    `--kind ${label.kind} --media ${label.media.join(',')}` +
+    (label.lang !== 'en' ? ` --lang ${label.lang}` : '') +
+    (minimal ? ' --minimal' : '') +
+    (own ? ' --text "label in that language"' : '');
+  if (minimal) label = { ...label, minimal: true };
   const text = own ? ['text'] : [];
   switch (label.media[0]) {
     case 'image':
@@ -232,7 +238,15 @@ function finish(out, media, lang) {
   );
   if (out.label) {
     out.disclosure = said;
-    out.next = nextStep(out.label, said);
+    const minimal = out.required === false && out.label.kind !== 'human';
+    out.next = nextStep(out.label, said, { minimal });
+    if (out.label.kind !== 'human') {
+      out.notes.push(
+        minimal
+          ? 'The label is voluntary, so the next step uses the smallest form (minimal): the EU "AI" disc and the content-type icon, with the words in the alt text. Leave minimal out for a label with a word.'
+          : 'The next step uses the short form: the EU "AI" disc with "Generated" or "Modified", the wording of the EU icons. Use minimal (no word) only when a caption next to the content says the label sentence.'
+      );
+    }
     if (said == null) {
       out.notes.push(
         `There is no built-in wording for "${lang}": write the label sentence in that language yourself and pass it as --text (and --human-text for a human-made part) when you render or stamp.`

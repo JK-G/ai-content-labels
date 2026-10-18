@@ -220,6 +220,21 @@ test('the video rule is the Code\'s, and the whole-video advice is marked as thi
   assert.doesNotMatch(rule, /keep it on screen for the whole video\. If you cannot/);
 });
 
-test('image advice points social posts to --display-width', () => {
-  assert.match(decide({ media: 'image', origin: 'generated', realistic: true }).placement[1], /--display-width 390/);
+test('image advice: the least invasive spot, the AI part of a composite, legible on a phone', () => {
+  const advice = decide({ media: 'image', origin: 'generated', realistic: true }).placement[1];
+  assert.match(advice, /bottom-right corner when it is free, else the bottom centre or bottom left, else the top edge/);
+  assert.match(advice, /--region/);
+  assert.match(advice, /legible full width on a phone/);
+});
+
+test('the next step takes the smallest form that fits: minimal when voluntary, a word when required or human', () => {
+  const voluntary = decide({ media: 'image', origin: 'generated', realistic: false });
+  assert.equal(voluntary.next.arguments.minimal, true);
+  assert.match(voluntary.next.cli, / --minimal/);
+  assert.ok(voluntary.notes.some((n) => /smallest form \(minimal\)/.test(n)));
+  const required = decide({ media: 'image', origin: 'generated', realistic: true });
+  assert.equal(required.next.arguments.minimal, undefined);
+  assert.ok(required.notes.some((n) => /short form/.test(n) && /caption/.test(n)));
+  assert.equal(decide({ media: 'image', origin: 'human' }).next.arguments.minimal, undefined);
+  assert.equal(decide({ media: 'text', origin: 'generated', publicInterest: false }).next.arguments.minimal, true);
 });

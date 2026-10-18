@@ -22,10 +22,10 @@ export function variants() {
   for (const lang of LANGS) {
     for (const theme of THEMES) {
       const add = (name, opts) => list.push({ dir: join(lang, theme), name, opts: { kind: 'human', lang, theme, ...opts } });
-      add('human-made', {});
+      add('human-made', { full: true });
       // Polish has one wording; English also has the compact "Human-made".
       if (lang === 'en') add('human-made-short', { short: true });
-      for (const m of MEDIA) add(`human-made-${m}`, { media: m });
+      for (const m of MEDIA) add(`human-made-${m}`, { full: true, media: m });
       add('human-made-mark', { minimal: true });
       for (const m of MEDIA) add(`human-made-mark-${m}`, { minimal: true, media: m });
     }

@@ -39,10 +39,25 @@ const labelProps = {
   text: { type: 'string', description: 'Own label text instead of the default wording' },
   human_text: { type: 'string', description: 'Own text for the human-made part' },
   description: { type: 'string', description: 'What the image shows, one short phrase; it goes before the label sentence in the alt text' },
-  short: { type: 'boolean', description: 'Compact wording, e.g. "Generated"' },
+  short: { type: 'boolean', description: 'One word next to the EU "AI" disc ("Generated", "Modified", the wording of the EU icons). The default form' },
+  full: { type: 'boolean', description: 'The full wording, e.g. "Generated with AI", instead of the short default' },
   uppercase: { type: 'boolean', description: 'Upper case with letter spacing, like the EU icons' },
-  minimal: { type: 'boolean', description: 'No text: only the author mark (EU "AI" disc, or a hand in the same disc) and the content-type icons. For tight spots, or where a caption already says it in words' },
+  minimal: {
+    type: 'boolean',
+    description: 'No text: only the author mark (EU "AI" disc, or a hand in the same disc) and the content-type icons. The smallest form: for voluntary labels, tight spots, or a required label whose sentence is in a visible caption',
+  },
+  color: { type: 'string', description: 'Pill colour as hex, e.g. #1f7a52; the text turns white or dark to keep 4.5:1 contrast. stamp_image and label_image also take auto: the accent colour of the image, toned to keep 4.5:1' },
   height: { type: 'integer', description: 'Label height in whole px: at least 24 with text, 20 with minimal' },
+};
+
+const positionProp = {
+  type: 'string',
+  enum: POSITIONS,
+  description: 'Default auto: the least invasive free spot, bottom-right first, then bottom-center or bottom-left, then the top edge',
+};
+const regionProp = {
+  type: 'string',
+  description: 'Only part of the image is AI (a generated photo inside a designed graphic): its box as "x,y,width,height" in px or % of the image ("50%,35%,46%,57%"). The label goes on that part, in its least invasive spot. For a rounded or angled part, give a box that lies inside it',
 };
 
 // Where an image comes from and where the labelled one goes, for stamp_image and label_image.
@@ -57,7 +72,7 @@ const sourceProps = {
 const displayWidthProp = {
   type: 'integer',
   description:
-    'How wide the image will be shown, in CSS px; the label is made at least 28 px tall at that width. Use 390 for an image shown full width on a phone (feed posts, stories). The result always reports label.minDisplayWidth, the narrowest display width at which the label stays 24 px tall',
+    'How wide the image will be shown, in CSS px; default 390, full width on a phone. The label is the smallest legible size there: 24 px tall with text, 20 px minimal. Pass a larger width only for images never shown full width on a phone. When the label has to shrink to fit, the result has a warning',
 };
 
 const nullable = (type) => ({ type: [type, 'null'] });
@@ -69,8 +84,15 @@ const labelBox = {
     top: { type: 'integer' },
     width: { type: 'integer' },
     height: { type: 'integer' },
-    theme: { type: 'string' },
+    form: { type: 'string', enum: ['minimal', 'short', 'full'] },
+    theme: { type: 'string', description: 'light, dark, or custom with color' },
+    color: { type: 'object', description: 'With color: background and ink (hex), source (auto or given) and, for auto, the accent found in the image' },
+    colorNote: { type: 'string' },
     position: { type: 'string' },
+    placement: { type: 'string', description: 'auto or given' },
+    reason: { type: 'string', description: 'Why auto placement chose this spot' },
+    spots: { type: 'object', description: 'How busy each spot is (mean brightness gradient); 6 or less counts as free' },
+    region: { type: 'object' },
     separation: { type: 'number' },
     minDisplayWidth: { type: 'integer' },
     displayWidth: { type: 'integer' },
@@ -88,6 +110,7 @@ const stampedProps = {
   contrast: { type: 'number' },
   wcag: { type: 'boolean' },
   metadata: { type: 'string' },
+  warning: { type: 'string', description: 'The label had to shrink to fit and looks smaller than legible where the image is shown' },
 };
 
 export const TOOLS = [
@@ -98,6 +121,7 @@ export const TOOLS = [
       'Call this right after you generate or edit an image that will be published. In one call it decides which label the EU AI Act asks for (media image, origin generated, or modified with modified:true) and burns that label into the image, then returns the alt text and the label sentence to publish with it. ' +
       'realistic is required: would the people who see it take it for a real photo or event? Answer honestly; ask the user if you cannot tell. ' +
       'It stamps a voluntary label too (labelling AI images is good practice); only_if_required:true skips the stamp when the label is not a duty. ' +
+      'The label takes the smallest legible form and the least invasive spot (bottom right first); pass region when only part of the image is AI, and color auto for a branded graphic. ' +
       'Pass description (what the image shows) to get the alt text. Never use it to mark AI output as human-made. A checklist, not legal advice.',
     inputSchema: {
       type: 'object',
@@ -112,8 +136,12 @@ export const TOOLS = [
         lang: labelProps.lang,
         text: { type: 'string', description: 'Own label text; needed for languages other than en and pl' },
         description: labelProps.description,
-        position: { type: 'string', enum: POSITIONS, description: 'Default top-left' },
+        position: positionProp,
+        region: regionProp,
         display_width: displayWidthProp,
+        color: labelProps.color,
+        minimal: { type: 'boolean', description: 'Pick the form yourself: true for no text, false for a word. By default a voluntary label is minimal and a required one has a word' },
+        full: labelProps.full,
         only_if_required: { type: 'boolean', description: 'Stamp only when the AI Act requires the label' },
         force: { type: 'boolean', description: 'Overwrite an existing output, or stamp an image that is already labelled' },
       },
@@ -237,8 +265,9 @@ export const TOOLS = [
       properties: {
         ...sourceProps,
         ...labelProps,
-        theme: { type: 'string', enum: ['auto', 'light', 'dark'], description: 'auto (default) picks the label colour from the image' },
-        position: { type: 'string', enum: POSITIONS, description: 'Default top-left' },
+        theme: { type: 'string', enum: ['auto', 'light', 'dark'], description: 'auto (default) picks the white or dark pill that stands out from the image; color sets your own' },
+        position: positionProp,
+        region: regionProp,
         display_width: displayWidthProp,
         metadata: { type: 'boolean', description: 'Write the IPTC DigitalSourceType tag, default true; the ai-content-labels marker that prevents double stamping is always written' },
         force: { type: 'boolean', description: 'Overwrite an existing output, or stamp a file that is already labelled' },

@@ -140,7 +140,9 @@ test('empty, duplicated and contradictory input is refused or cleaned', () => {
   assert.equal(renderLabel({ media: 'image,image' }).disclosure, 'Generated with AI: image.');
   assert.throws(() => renderLabel({ media: 'image,text', human: 'text' }), /text is in both --media and --human/);
   assert.throws(() => renderLabel({ short: 'maybe' }), /true or false/);
-  assert.equal(renderLabel({ short: 'false' }).width, renderLabel({}).width);
+  assert.equal(renderLabel({ short: 'false' }).width, renderLabel({ full: true }).width);
+  assert.throws(() => renderLabel({ full: true, short: true }), /--full and --short contradict/);
+  assert.throws(() => renderLabel({ full: true, minimal: true }), /--full and --minimal contradict/);
 });
 
 test('labels with text are at least 24 px; minimal ones at least 20', () => {

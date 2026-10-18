@@ -37,12 +37,12 @@ async function sheet(file, rows, { panelWidth, rowHeight, pad = 24 }) {
 await sheet(
   'labels.png',
   [
-    { kind: 'generated', media: 'image', height: 36 },
-    { kind: 'modified', media: 'image,voice', height: 36 },
+    { kind: 'generated', media: 'image', full: true, height: 36 },
+    { kind: 'modified', media: 'image,voice', full: true, height: 36 },
     { kind: 'basic', text: 'Voice generated with AI', height: 36 },
     { kind: 'generated', media: 'image', human: 'text', short: true, height: 36 },
-    { kind: 'human', media: 'text,image', height: 36 },
-    { kind: 'generated', media: 'image,video', lang: 'pl', height: 36 },
+    { kind: 'human', media: 'text,image', full: true, height: 36 },
+    { kind: 'generated', media: 'image,video', lang: 'pl', full: true, height: 36 },
     { kind: 'generated', media: 'image', short: true, uppercase: true, height: 36 },
   ],
   { panelWidth: 480, rowHeight: 52 }

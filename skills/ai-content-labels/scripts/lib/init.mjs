@@ -19,6 +19,7 @@ If \`ai-labels\` is not installed, run \`npx -y -p github:JK-G/ai-content-labels
 
 - Answer the realism question honestly. Use \`--realistic\` when people could take the image for a real photo or event (a person, product or place that does not exist but could counts). Use \`--no-realistic\` for images that are clearly illustrated, stylised or impossible. If you cannot tell, ask the user.
 - Add \`--modified\` when AI changed a real photo or a human-made image instead of making it from scratch.
+- The command picks the smallest legible label and the least invasive spot (bottom right first). If only part of the image is AI, such as a generated photo inside a designed graphic, add \`--region x,y,width,height\` with that part's box. For a branded graphic, \`--color auto\` matches the label to its colours.
 - Publish the alt text the command returns (what the image shows, then the label sentence) with the image.
 - Never put a human-made label on anything AI generated or changed.`;
 

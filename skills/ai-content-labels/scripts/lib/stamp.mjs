@@ -3,6 +3,8 @@ import { extname, join, dirname } from 'node:path';
 import { readFileSync, renameSync, unlinkSync, existsSync, openSync, readSync, closeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderLabel, POSITIONS, THEMES, ALT_MISSING } from './render.mjs';
+import { spotAt, chooseSpot, busyMap, parseRegion, MAP_SIZE } from './place.mjs';
+import { parseColor, colorTheme, accentColor, accentTones } from './color.mjs';
 import { over, parseHex, contrastRatio } from './contrast.mjs';
 import { UsageError, parseBoolean } from './i18n.mjs';
 
@@ -88,17 +90,19 @@ export function mergeXmp(existing, kind, { sourceType = DIGITAL_SOURCE[kind] ?? 
   return merged.slice(0, close) + labelDescription(kind) + merged.slice(close);
 }
 
-// Stamped labels never go below these heights: a label with text needs 24 px to stay readable.
+// The smallest legible label: 24 px tall with text, 20 px without (--minimal), as the image is
+// shown. Stamped labels never go below these heights in the file either.
 export const MIN_HEIGHT = { text: 24, minimal: 20 };
 
-// The height a label gets as displayed when the caller says how wide the image is shown
-// (--display-width): the same 28 px the automatic size never goes below in the file.
-export const DISPLAY_HEIGHT = 28;
-// The width of a phone screen in CSS px, the case --display-width is for.
+// The width an image is shown at on a phone, in CSS px: full width in a feed, a story or a mobile
+// article. The automatic size assumes it, because a label that is legible there is legible on
+// every larger screen; --display-width sets another width.
 export const PHONE_WIDTH = 390;
 
-// Label height for an image: about 6% of the shorter side and at least 2.5% of the longer side
-// (so tall 9:16 covers and wide banners still get a visible label), between 28 and 512 px.
+// --color auto keeps the neutral pill where the accent tone would stand out from the spot under the
+// label by less than this luminance ratio.
+export const MIN_SEPARATION = 1.5;
+
 // The largest image stamped, in pixels (about 7070×7070, or 8660×5770 at 3:2). Decoding is capped at
 // this too, so a small file that claims huge dimensions cannot exhaust memory.
 export const MAX_PIXELS = 50_000_000;
@@ -128,7 +132,13 @@ function looksLikeMarkup(input) {
   return /^(﻿)?\s*</.test(head.toString('utf8'));
 }
 
-export const autoHeight = (w, h) => Math.min(512, Math.max(28, Math.round(Math.min(w, h) * 0.06), Math.round(Math.max(w, h) * 0.025)));
+// Label height in the file's pixels for an image `width` px wide: the smallest legible height
+// (MIN_HEIGHT) as the image is shown `displayWidth` CSS px wide, never below it in the file, at most
+// 512 px. 1080 px wide: 56 px minimal, 67 px with text.
+export function autoHeight(width, { minimal = false, displayWidth = PHONE_WIDTH } = {}) {
+  const min = minimal ? MIN_HEIGHT.minimal : MIN_HEIGHT.text;
+  return Math.min(512, Math.max(min, Math.ceil((min * width) / displayWidth)));
+}
 
 export async function stampImage(input, output, opts = {}) {
   const format = formatFor(output);
@@ -160,8 +170,10 @@ export async function stampBuffer(buffer, opts = {}) {
 // with the label and the XMP; the caller picks the output format and where it goes.
 async function compose(input, opts) {
   const sharp = await loadSharp();
-  const position = opts.position ?? 'top-left';
+  const position = opts.position ?? 'auto';
   if (!POSITIONS.includes(position)) throw new UsageError(`position must be one of: ${POSITIONS.join(', ')}`);
+  const color = parseColor(opts.color);
+  if (color && opts.theme != null && opts.theme !== 'auto') throw new UsageError('pass --theme or --color, not both');
   const minimal = parseBoolean(opts.minimal, '--minimal') ?? false;
   const min = minimal ? MIN_HEIGHT.minimal : MIN_HEIGHT.text;
   if (opts.height != null && !(Number(opts.height) >= min)) {
@@ -203,36 +215,64 @@ async function compose(input, opts) {
     throw new UsageError(`already labelled${previous ? ` as ${previous}` : ''} (an ai-content-labels marker is in the XMP); pass --force to stamp again`);
   }
   const { width: W, height: H } = info;
+  // The label belongs to the whole image, or with --region to the AI part of it (a generated photo
+  // inside a designed graphic): it is then placed on that part.
+  const region = parseRegion(opts.region, W, H);
+  const area = region ?? { left: 0, top: 0, width: W, height: H };
 
-  // With --display-width the label is also made at least DISPLAY_HEIGHT px tall as shown at that width.
-  let height = opts.height ? Number(opts.height) : autoHeight(W, H);
-  if (displayWidth) height = Math.min(512, Math.max(height, Math.ceil((DISPLAY_HEIGHT * W) / displayWidth)));
-  let label = renderLabel({ ...opts, height, theme: opts.theme === 'auto' || !opts.theme ? 'light' : opts.theme });
-  // Shrink the label when it is wider than the image allows.
-  const fits = (l) => l.width + l.height <= W && l.height * 2 <= H;
+  // The smallest legible size where the image is shown: a phone unless --display-width says otherwise.
+  const shownAt = displayWidth ?? PHONE_WIDTH;
+  let height = opts.height ? Number(opts.height) : autoHeight(W, { minimal, displayWidth: shownAt });
+  // The size does not depend on the colour, so it is measured with the light pill.
+  const draw = (h) => renderLabel({ ...opts, height: h, theme: 'light', color: undefined });
+  let label = draw(height);
+  // Shrink the label when it is wider than the image (or the region) allows.
+  const fits = (l) => l.width + l.height <= area.width && l.height * 2 <= area.height;
   while (!fits(label) && height > min) {
     height = Math.max(min, Math.floor(height * 0.9));
-    label = renderLabel({ ...opts, height, theme: label.options.theme });
+    label = draw(height);
   }
   if (!fits(label)) {
+    const what = region ? `the region (${area.width}×${area.height})` : `the image (${W}×${H})`;
     throw new UsageError(
-      `the image (${W}×${H}) is too small for a legible label; it needs about ${label.width + label.height}×${label.height * 2} px. ` +
-        'For thumbnails use --minimal, or put the label next to the image with render'
+      `${what} is too small for a legible label; it needs about ${label.width + label.height}×${label.height * 2} px. ` +
+        (region ? 'Label the whole image instead, or put the label next to it' : `${minimal ? '' : 'For thumbnails use --minimal, or '}put the label next to the image with render`)
     );
   }
 
   const margin = Math.round(label.height * 0.5);
-  const left = position.endsWith('left') ? margin : W - margin - label.width;
-  const top = position.startsWith('top') ? margin : H - margin - label.height;
-
-  // The theme whose pill stands out more from the pixels under it.
-  const mean = regionMean(data, info, left, top, label.width, label.height);
-  const separation = (t) => contrastRatio(over(parseHex(THEMES[t].background), THEMES[t].backgroundOpacity, mean), mean);
-  let theme = opts.theme && opts.theme !== 'auto' ? opts.theme : null;
-  if (!theme) {
-    theme = separation('dark') >= separation('light') ? 'dark' : 'light';
-    label = renderLabel({ ...opts, height: label.height, theme });
+  // A small copy for judging spots and colours, decoded once and only when needed.
+  let copy;
+  const smallCopy = () => (copy ??= decodeSmall(sharp, input, W, H));
+  let spot;
+  if (position === 'auto') {
+    const small = await smallCopy();
+    spot = chooseSpot(busyMap(small.data, small.width, small.height, small.channels, small.scale), area, label.width, label.height, margin);
+  } else {
+    spot = { position, ...spotAt(position, area, label.width, label.height, margin) };
   }
+  const { left, top } = spot;
+
+  // The colour: a given one, the image's accent (--color auto), or the neutral pill that stands out
+  // more from the pixels under the label.
+  const mean = regionMean(data, info, left, top, label.width, label.height);
+  const separationOf = (t) => contrastRatio(over(parseHex(t.background), t.backgroundOpacity, mean), mean);
+  let theme = opts.theme && opts.theme !== 'auto' ? opts.theme : null;
+  let pill = color === 'auto' ? null : color;
+  let accent = null;
+  if (color === 'auto') {
+    accent = accentColor((await smallCopy()).data, 3);
+    if (accent) {
+      const { dark, light } = accentTones(accent.oklch);
+      pill = separationOf(colorTheme(dark)) >= separationOf(colorTheme(light)) ? dark : light;
+      // A pill the same tone as the spot under it would blend in: keep the neutral one there.
+      if (separationOf(colorTheme(pill)) < MIN_SEPARATION) pill = null;
+    }
+  }
+  if (pill) theme = 'custom';
+  else if (!theme) theme = separationOf(THEMES.dark) >= separationOf(THEMES.light) ? 'dark' : 'light';
+  label = renderLabel({ ...opts, height: label.height, ...(pill ? { theme: undefined, color: pill } : { theme, color: undefined }) });
+  const used = pill ? colorTheme(pill) : THEMES[theme];
 
   // Keep the input's EXIF, ICC profile and XMP; always add the visible-label marker, and the
   // DigitalSourceType for AI labels unless --no-metadata.
@@ -247,13 +287,24 @@ async function compose(input, opts) {
       top,
       width: label.width,
       height: label.height,
+      form: label.options.form,
       theme,
-      position,
-      separation: Math.round(separation(theme) * 100) / 100,
+      ...(pill && { color: { background: pill, ink: used.ink, source: color === 'auto' ? 'auto' : 'given', ...(accent && { accent: accent.hex }) } }),
+      ...(color === 'auto' && !pill && { colorNote: accent ? 'the accent colour would blend into the spot under the label; the neutral pill is used' : 'no clear accent colour in the image; the neutral pill is used' }),
+      position: spot.position,
+      placement: position === 'auto' ? 'auto' : 'given',
+      ...(spot.spots && { reason: spot.reason, spots: spot.spots }),
+      ...(region && { region }),
+      separation: Math.round(separationOf(used) * 100) / 100,
       // The narrowest display width at which the label is still `min` px tall (24, or 20 for minimal).
       minDisplayWidth: Math.ceil((min * W) / label.height),
-      ...(displayWidth && { displayWidth, displayHeight: Math.round((label.height * displayWidth * 10) / W) / 10 }),
+      // How tall the label looks where the image is shown: on a phone unless --display-width.
+      displayWidth: shownAt,
+      displayHeight: Math.round((label.height * Math.min(shownAt, W) * 10) / W) / 10,
     },
+    ...(label.height * Math.min(shownAt, W) < min * W && {
+      warning: `the label had to shrink to fit ${region ? 'the region' : 'the image'}: shown ${shownAt} px wide it is under the legible ${min} px. ${minimal ? '' : 'Use --minimal, '}${region ? 'a larger region, ' : ''}or put the label next to the image`,
+    }),
     alt: label.alt,
     ...(label.alt == null && { altMissing: ALT_MISSING }),
     disclosure: label.disclosure,
@@ -266,6 +317,14 @@ async function compose(input, opts) {
         : 'XMP ai-content-labels marker only (no DigitalSourceType, --no-metadata)',
   };
   return { pipeline, result, meta };
+}
+
+// The image at most MAP_SIZE px on the long side, in 3-channel sRGB, for judging spots and colours.
+async function decodeSmall(sharp, input, W, H) {
+  const scale = Math.min(1, MAP_SIZE / Math.max(W, H));
+  const [w, h] = [Math.max(1, Math.round(W * scale)), Math.max(1, Math.round(H * scale))];
+  const { data, info } = await sharp(input, LIMIT).rotate().resize(w, h, { fit: 'fill' }).removeAlpha().toColourspace('srgb').raw().toBuffer({ resolveWithObject: true });
+  return { data, width: info.width, height: info.height, channels: info.channels, scale: info.width / W };
 }
 
 // Mean sRGB colour of the pixels under the label, sampled on a grid.

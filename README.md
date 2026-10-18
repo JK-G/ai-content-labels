@@ -18,7 +18,7 @@ The icons leave the practical questions open. Does this image need a label at al
 
 - **`label`** is the one-call version for an image an agent has just generated or edited. You say whether people could take it for real; it runs `decide` and stamps the label `decide` picked. Voluntary labels are stamped too, unless you pass `--only-if-required`. Over MCP it is `label_image`, which also takes the image as a URL or base64 and can return the labelled image instead of writing a file.
 - **`decide`** goes through the Article 50(4) questions: would the audience take the content for real, is it an artistic work, is the text published on a matter of public interest, did a person review it. It returns whether the label is a duty or a voluntary choice, which label fits (and the official EU icon with the same meaning), where to place it, the label sentence and the next step, as a command and, in JSON and over MCP, as the tool call to make. When a deciding fact is missing, it asks one question instead of guessing. The answer is a few lines; `--explain` adds the legal basis, notes and sources.
-- **`stamp`** burns the label into a JPG, PNG, WebP, AVIF or TIFF, so it survives downloads and reshares as the EU guidance asks. You always say which label (`--kind`); stamp never assumes "Generated with AI". The label height follows the image (about 6% of the shorter side and at least 2.5% of the longer side, never below 28 px or above 512 px), its colour is the one that stands out more from the corner it sits in. Those are the file's pixels: for an image shown smaller, such as a post full width on a phone, pass `--display-width 390` and the label stays at least 28 px tall on that screen. For generated and modified labels an IPTC DigitalSourceType tag goes into the XMP; basic and human-made labels get only the project's marker, because the IPTC vocabulary has no term for them.
+- **`stamp`** burns the label into a JPG, PNG, WebP, AVIF or TIFF, so it survives downloads and reshares as the EU guidance asks. You always say which label (`--kind`); stamp never assumes "Generated with AI". By default the label is as small as it can be while still readable on a phone, and it sits where it covers the least, bottom right first; see [Size, place and colour](#size-place-and-colour). For generated and modified labels an IPTC DigitalSourceType tag goes into the XMP; basic and human-made labels get only the project's marker, because the IPTC vocabulary has no term for them.
 - **`render`** draws the same label as SVG, PNG or WebP, with `role="img"`, `lang` and an `aria-label`. With `--format html` it writes the label as real text and inline icons, for web pages and apps.
 - **Content-type icons** show which part was AI: image, text, audio, voice, music, video. A second label, "Made by a human", shows which part was not.
 - **A ready-made "Made by a human" pack** for people who label their own work by hand, no agent needed: SVG and PNG, English and Polish, light and dark, with or without a content-type icon. See below.
@@ -207,17 +207,17 @@ From the command line. `ai-labels` is the command the package installs; from a c
 For an image an agent just made, `label` decides and stamps in one step:
 
 ```
-$ ai-labels label portrait.png --realistic --description "Portrait of a woman in a linen shirt, studio light"
-REQUIRED: realistic AI image, a deep fake under Article 50(4)
-portrait.ai-label.png
-label: 363×61 px, dark pill, top-left, text contrast 12.55:1, stands out 7.18:1 from the image
-display: 24 px tall or more when the image is shown 403 px wide or wider; shown narrower, as on a phone, it is smaller: pass --display-width 390
+$ ai-labels label wolf.png --no-realistic --description "Low-poly grey wolf standing, front view"
+NOT REQUIRED: not a deep fake (would not be taken for real) (stamped anyway: labelling AI images is good practice; --only-if-required skips it)
+wolf.ai-label.png
+label: 140×65 px, minimal, light pill, bottom-right (auto: bottom-right is free), mark contrast 14.78:1, stands out 14.19:1 from the image
+display: 20.2 px tall when the image is shown 390 px wide (full width on a phone; --display-width for other sizes)
 disclosure: Generated with AI: image.
-alt: Portrait of a woman in a linen shirt, studio light. Generated with AI: image.
+alt: Low-poly grey wolf standing, front view. Generated with AI: image.
 metadata: XMP DigitalSourceType trainedAlgorithmicMedia
 ```
 
-`--modified` is for a real photo that AI changed. With `--no-realistic` the label is voluntary and `label` still stamps it; `--only-if-required` skips it. Without either answer it asks the question below and exits with code 2.
+A voluntary label gets the minimal form: the EU "AI" disc and the image icon, with the words in the alt text. With `--realistic` the label is required and keeps one word, "Generated". `--modified` is for a real photo that AI changed, and `--only-if-required` skips voluntary labels. Without a realism answer `label` asks the question below and exits with code 2.
 
 For anything else, start with `decide`:
 
@@ -230,14 +230,14 @@ REQUIRED: realistic AI image, a deep fake under Article 50(4)
 Next: ai-labels stamp <image> --kind generated --media image --description "what it shows"
 Label: --kind generated --media image, says "Generated with AI: image." (official EU icon with this meaning: generated)
 - Burn the label into the image pixels (the `stamp` command), so it stays visible when the image is downloaded or reshared.
-- Use a corner where platforms do not draw their own buttons or captions; ...
+- stamp puts the label in the least invasive spot, with nothing covering it: the bottom-right corner when it is free, ...
 Accessibility: Give the image an alt text that says what it shows, then the label sentence (alt="<what the image shows>. Generated with AI: image."); ...
 Do not animate the label (WCAG 2.2.2) or make it flash (WCAG 2.3.1). Not legal advice. More: rerun with --explain
 
 $ ai-labels stamp wolf.png --kind generated --media image --description "Low-poly grey wolf standing, front view"
 wolf.ai-label.png
-label: 447×75 px, light pill, top-left, text contrast 14.78:1, stands out 14.19:1 from the image
-display: 24 px tall or more when the image is shown 402 px wide or wider; shown narrower, as on a phone, it is smaller: pass --display-width 390
+label: 353×78 px, short, light pill, bottom-right (auto: bottom-right is free), text contrast 14.78:1, stands out 14.19:1 from the image
+display: 24.3 px tall when the image is shown 390 px wide (full width on a phone; --display-width for other sizes)
 disclosure: Generated with AI: image.
 alt: Low-poly grey wolf standing, front view. Generated with AI: image.
 metadata: XMP DigitalSourceType trainedAlgorithmicMedia
@@ -250,36 +250,46 @@ $ ai-labels render --format html --kind generated --media text
 
 ## Which label
 
-| Kind | Use it when | Default text (en / pl) |
-|---|---|---|
-| `generated` | All of the content comes from AI, apart from the prompt | Generated with AI / Wygenerowane przez AI |
-| `modified` | Real or human-made content was partly changed by AI: a swapped face, added objects, a replaced voice | Modified with AI / Zmodyfikowane przez AI |
-| `basic` | AI was involved and you want your own words, such as "Voice generated with AI" | Made with AI / Z udziałem AI |
-| `human` | A person made it without generative AI, and you want to say so | Made by a human / Stworzone przez człowieka (this project's own mark, not an EU icon) |
+| Kind | Use it when | Text (en / pl), default | With `--full` |
+|---|---|---|---|
+| `generated` | All of the content comes from AI, apart from the prompt | Generated / Wygenerowane | Generated with AI / Wygenerowane przez AI |
+| `modified` | Real or human-made content was partly changed by AI: a swapped face, added objects, a replaced voice | Modified / Zmodyfikowane | Modified with AI / Zmodyfikowane przez AI |
+| `basic` | AI was involved and you want your own words, such as "Voice generated with AI" | Made with AI / Z udziałem AI | the same |
+| `human` | A person made it without generative AI, and you want to say so | Human-made / Stworzone przez człowieka | Made by a human / Stworzone przez człowieka |
 
-`--media` adds the content-type icons. `--human text` puts a "Made by a human" label next to an AI label. `--short` switches to the compact wording that mirrors the EU icons ("Generated"), and `--uppercase` sets it in spaced capitals like the icons themselves.
+The human-made mark is this project's own, not an EU icon. Next to the "AI" disc, the default word reads like the EU icons themselves ("AI Generated", "AI Modified"). `--media` adds the content-type icons. `--human text` puts a "Made by a human" label next to an AI label. `--uppercase` sets the text in spaced capitals like the icons.
 
 ### Minimal form
 
 ![Minimal labels: the AI disc with an image icon, with image and voice icons, an AI label next to a hand with a text icon, and a hand with text and image icons](docs/minimal.png)
 
-`--minimal` drops the text. The left side says who made it (the EU "AI" disc, or a hand in the same disc), the right side says what (the content-type icons). It fits where a full label does not: thumbnails, avatars, dense feeds, UI chips. Two things to know before you use it:
+`--minimal` drops the text. The left side says who made it (the EU "AI" disc, or a hand in the same disc), the right side says what (the content-type icons). `label` and `decide` use it for voluntary labels, and it fits where a label with text does not: thumbnails, avatars, dense feeds, UI chips. Two things to know before you use it:
 
-- In user testing for the EU icons, labels with text were noticed and understood better. When the label is a legal duty, prefer the full form, or keep the minimal one and say the same thing in words in the caption.
+- In user testing for the EU icons, labels with text were noticed and understood better. When the label is a legal duty, keep a word (the default), or use the minimal form and say the same thing in words in the caption.
 - Without text, "generated" and "modified" look the same. Only the alt text tells them apart.
 
 The minimal form goes down to 20 px; labels with text stop at 24 px, because smaller type is unreadable. The hand is a filled raised hand with five fingers, 0.62 of its disc tall at every size, in SVG, PNG and HTML alike. Being solid, it matches the weight of the bold "AI" letters, and at the smallest sizes it still reads as a hand by its outline.
 
 ![Minimal AI and human-made labels at 20, 24, 28, 32 and 40 px, at actual size and enlarged four times, in a light and a dark theme](docs/small.png)
 
+## Size, place and colour
+
+Unless you or your agent choose otherwise, a stamped label takes the smallest form and size that still do the job, in the spot where it covers the least.
+
+- **Form.** A required label shows the EU "AI" disc and one word, "Generated" or "Modified". A voluntary label from `label` or `decide` drops the word (`--minimal`) and leaves it to the alt text. Human-made labels keep their words, because a hand alone is not a sign people know yet. `--full` gives the full wording.
+- **Size.** 24 px tall with text and 20 px without, as the image is shown full width on a phone (390 CSS px). A 1080 px wide image gets a 67 px label, or 56 px minimal. Larger screens show it larger. For an image never shown that small, pass the width it is shown at: `--display-width 1080` gives the same image a 24 px label.
+- **Place.** The bottom-right corner when it is free. If text, a logo or detail sits there, the freer of bottom centre and bottom left; if the whole bottom edge is taken, the top edge. The tool scores how busy each spot is (the mean brightness gradient under and around the label) and reports the scores with the spot it chose. `--position` picks a spot yourself.
+- **Part of an image.** When only part of a graphic is AI, such as a generated photo inside a designed ad, pass that part's box: `--region 200,390,860,690` in px, or in % of the image. The label goes on that part, in its least invasive spot. For a rounded or angled part, pass a box that lies inside it: the corners of its bounding box may be outside the part.
+- **Colour.** A white or dark pill by default, whichever stands out more from the spot. `--color #1f7a52` uses your colour. `--color auto` takes the accent colour of the image, so the label matches a branded graphic. The pill is then opaque and the text turns white or dark to keep 4.5:1 contrast; with `auto` the tone gets darker or lighter until it does, so a brand green may come out a shade deeper. The disc stays the official black or white EU icon.
+
 ## Accessibility
 
 Article 50(5) asks for disclosures that conform to the applicable accessibility requirements, and the EU icon guidance asks for alt text or ARIA labels. The labels follow WCAG 2.2:
 
-- **Contrast:** the text keeps at least 4.5:1 against its own background even when that background is semi-transparent and the image behind it is pure black or pure white. Options that would break this are refused unless you pass `--allow-low-contrast`.
+- **Contrast:** the text keeps at least 4.5:1 against its own background even when that background is semi-transparent and the image behind it is pure black or pure white. A label in your own colour (`--color`) is opaque, and its text is white or dark, whichever keeps 4.5:1. Options that would break this are refused unless you pass `--allow-low-contrast`.
 - **Screen readers:** `render`, `stamp` and `alt` return the label sentence as `disclosure` ("Generated with AI: image and voice."). Text burned into pixels is invisible to assistive technology, so the alt text of a labelled image is a short description of what it shows, then that sentence: pass `--description` and the commands return it composed as `alt` ("Modern house among pine trees, architectural visualisation. Generated with AI: image."). Without a description `alt` is null, so an agent cannot publish the sentence alone as the alt of an informative image. `render` also returns `labelAlt`, the alt for an `<img>` that shows the label on its own. When the label is a legal duty, put the sentence in a visible caption too. Rendered SVGs carry it in `aria-label` and `<title>`; when the image's alt or caption already says it, give a separate label `alt=""` or `aria-hidden="true"`.
 - **Real text on web pages:** `render --format html` writes the label as text with decorative inline icons and a stylesheet (`--css`). It zooms, reflows, translates and follows the page's colour scheme and forced colours, which an image of text cannot do (WCAG 1.4.4, 1.4.5, 1.4.12). A page that declares only a light scheme keeps a light label when the system is dark; `--theme` pins one. In a narrow column the icons move under the words instead of the words breaking. Use SVG or PNG for images, video overlays and places that only accept an image.
-- **Legible everywhere:** in SVG, PNG and stamped labels the text is drawn as outlines from Inter SemiBold, so it looks the same in every browser and image viewer and covers the alphabets of all 24 official EU languages. Labels with text are never smaller than 24 px tall, and minimal ones 20 px; an image too small for that gets an error instead of an unreadable label. Those are the file's pixels. A screen that shows the image smaller shrinks the label too, so `stamp` reports the narrowest display width at which the label stays 24 px tall, and `--display-width` sizes it for the screen you name (390 for a phone).
+- **Legible everywhere:** in SVG, PNG and stamped labels the text is drawn as outlines from Inter SemiBold, so it looks the same in every browser and image viewer and covers the alphabets of all 24 official EU languages. Labels with text are never smaller than 24 px tall in the file, and minimal ones 20 px; an image too small for that gets an error instead of an unreadable label. By default they are that size on a phone that shows the image full width too. When a wide banner or a small region forces the label to shrink, `stamp` says so in a `warning`, and `displayHeight` always reports how tall the label looks. `--display-width` sizes it for another screen.
 - **Still:** labels are static. The skill tells agents not to animate them (WCAG 2.2.2) or make them flash (WCAG 2.3.1).
 
 ## What the AI Act asks
