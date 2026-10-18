@@ -42,18 +42,21 @@ test('mergeXmp starts a packet when there is none or it is unreadable', () => {
   assert.equal(mergeXmp('garbage', 'generated'), digitalSourceXmp('generated'));
 });
 
-test('auto height: the smallest legible size full width on a phone, 24 px with text, 20 minimal, up to 512', () => {
-  assert.equal(autoHeight(1080), 67); // ceil(24 × 1080 / 390)
+test('auto height: the smallest legible size full width on a phone, 18 px for the icon and words, 20 minimal, up to 512', () => {
+  assert.equal(autoHeight(1080), 50); // ceil(18 × 1080 / 390)
+  assert.equal(autoHeight(1080, { form: 'icon' }), 50);
+  assert.equal(autoHeight(1080, { form: 'short' }), 50);
   assert.equal(autoHeight(1080, { minimal: true }), 56);
-  assert.equal(autoHeight(1600), 99);
+  assert.equal(autoHeight(1080, { form: 'minimal' }), 56);
+  assert.equal(autoHeight(1600), 74);
   // Narrower than a phone: shown 1:1, so the legible size itself.
-  assert.equal(autoHeight(300), 24);
+  assert.equal(autoHeight(300), 18);
   assert.equal(autoHeight(200, { minimal: true }), 20);
   // Shown wider than the phone: smaller in the file, never below the legible size.
-  assert.equal(autoHeight(1080, { displayWidth: 1080 }), 24);
+  assert.equal(autoHeight(1080, { displayWidth: 1080 }), 18);
   assert.equal(autoHeight(12000), 512);
   // The 0.3 call shape (width, height) still works.
-  assert.equal(autoHeight(1080, 1080), 67);
+  assert.equal(autoHeight(1080, 1080), 50);
   assert.doesNotThrow(() => renderLabel({ height: autoHeight(12000) }));
 });
 
@@ -77,11 +80,16 @@ test('the marker is written for every kind; the DigitalSourceType only when aske
 });
 
 test('the theme is the one that stands out more from the image', { skip: !sharp && 'sharp not installed' }, async () => {
-  const mid = await stamp(await flat('g155.png', 155), { kind: 'generated', media: 'image' });
+  const mid = await stamp(await flat('g155.png', 155), { kind: 'generated', media: 'image', short: true });
   assert.equal(mid.label.theme, 'dark');
   assert.ok(mid.label.separation > 5);
-  const darker = await stamp(await flat('g100.png', 100), { kind: 'generated', media: 'image' });
+  const darker = await stamp(await flat('g100.png', 100), { kind: 'generated', media: 'image', short: true });
   assert.equal(darker.label.theme, 'light');
+  // The icon: the black disc (theme light) on a light image, the white one (theme dark) on a dark one.
+  const light = await stamp(await flat('g220.png', 220), { kind: 'generated', media: 'image' });
+  assert.deepEqual([light.label.form, light.label.theme, light.label.disc], ['icon', 'light', 'black']);
+  const dark = await stamp(await flat('g40.png', 40), { kind: 'generated', media: 'image' });
+  assert.deepEqual([dark.label.form, dark.label.theme, dark.label.disc], ['icon', 'dark', 'white']);
 });
 
 test('stamp refuses to overwrite, to stamp twice or onto itself; force overrides', { skip: !sharp && 'sharp not installed' }, async () => {
@@ -155,32 +163,39 @@ test('alt is null without a description, and the result says what to pass', { sk
   const d = await stamp(input, { kind: 'generated', media: 'image', description: 'A wolf.', out: join(tmp, 'alt-out2.png') });
   assert.equal(d.alt, 'A wolf. Generated with AI: image.');
   assert.equal(d.altMissing, undefined);
-  const low = await stamp(input, { kind: 'generated', media: 'image', backgroundOpacity: 0.3, allowLowContrast: true, out: join(tmp, 'alt-out3.png') });
+  const low = await stamp(input, { kind: 'generated', media: 'image', short: true, backgroundOpacity: 0.3, allowLowContrast: true, out: join(tmp, 'alt-out3.png') });
   assert.equal(low.wcag, false);
 });
 
-test('a label with text needs 24 px; minimal stamps go down to 20', { skip: !sharp && 'sharp not installed' }, async () => {
+test('the icon and a label with text need 18 px; minimal stamps need 20', { skip: !sharp && 'sharp not installed' }, async () => {
   const input = await flat('floor.png', 240, 800, 600);
-  await assert.rejects(stamp(input, { kind: 'generated', media: 'image', height: 20, out: join(tmp, 'f1.png') }), /at least 24 px/);
-  const r = await stamp(input, { kind: 'generated', media: 'image', height: 20, minimal: true, out: join(tmp, 'f2.png') });
-  assert.equal(r.label.height, 20);
+  await assert.rejects(stamp(input, { kind: 'generated', media: 'image', short: true, height: 17, out: join(tmp, 'f1.png') }), /at least 18 px/);
+  await assert.rejects(stamp(input, { kind: 'generated', media: 'image', height: 17, out: join(tmp, 'f1.png') }), /at least 18 px/);
+  await assert.rejects(stamp(input, { kind: 'generated', media: 'image', minimal: true, height: 19, out: join(tmp, 'f1.png') }), /between 20 and 512 px/);
+  const r = await stamp(input, { kind: 'generated', media: 'image', height: 18, short: true, out: join(tmp, 'f2.png') });
+  assert.equal(r.label.height, 18);
+  const m = await stamp(input, { kind: 'generated', media: 'image', height: 20, minimal: true, out: join(tmp, 'f3.png') });
+  assert.equal(m.label.height, 20);
 });
 
 test('the label is the smallest legible size where the image is shown, a phone by default', { skip: !sharp && 'sharp not installed' }, async () => {
-  // A 1080 px feed post shown full width on a 390 px phone: 67 px in the file, 24 px as shown.
+  // A 1080 px feed post shown full width on a 390 px phone: 50 px in the file, 18 px as shown.
   const post = await flat('post.png', 200, 1080, 1350);
   const plain = await stamp(post, { kind: 'generated', media: 'image', out: join(tmp, 'post-a.png') });
-  assert.equal(plain.label.height, 67);
-  assert.equal(plain.label.form, 'short');
+  assert.deepEqual([plain.label.form, plain.label.height, plain.label.width], ['icon', 50, 50]);
   assert.equal(plain.label.displayWidth, 390);
-  assert.ok(plain.label.displayHeight >= 24 && plain.label.displayHeight < 25);
-  assert.equal(plain.label.minDisplayWidth, Math.ceil((24 * 1080) / 67));
+  assert.ok(plain.label.displayHeight >= 18 && plain.label.displayHeight < 19);
+  assert.equal(plain.label.minDisplayWidth, Math.ceil((18 * 1080) / 50));
+  const word = await stamp(post, { kind: 'generated', media: 'image', short: true, out: join(tmp, 'post-w.png') });
+  assert.deepEqual([word.label.form, word.label.height], ['short', 50]);
   const minimal = await stamp(post, { kind: 'generated', media: 'image', minimal: true, out: join(tmp, 'post-b.png') });
   assert.equal(minimal.label.height, 56);
   assert.ok(minimal.label.displayHeight >= 20);
-  // Shown wider than on a phone (a desktop-only page): smaller in the file, never below 24 px.
+  // Shown wider than on a phone (a desktop-only page): smaller in the file, never below 18 px.
   const wide = await stamp(post, { kind: 'generated', media: 'image', displayWidth: 1080, out: join(tmp, 'post-c.png') });
-  assert.equal(wide.label.height, 24);
-  await assert.rejects(stamp(post, { kind: 'generated', displayWidth: 390, height: 40, out: join(tmp, 'post-d.png') }), /--height or --display-width, not both/);
+  assert.equal(wide.label.height, 18);
+  // --height with --display-width: that size, laid out for that width.
+  const both = await stamp(post, { kind: 'generated', short: true, displayWidth: 1080, height: 40, out: join(tmp, 'post-d.png') });
+  assert.deepEqual([both.label.height, both.label.displayHeight], [40, 40]);
   await assert.rejects(stamp(post, { kind: 'generated', displayWidth: '39.5', out: join(tmp, 'post-e.png') }), /whole CSS px/);
 });

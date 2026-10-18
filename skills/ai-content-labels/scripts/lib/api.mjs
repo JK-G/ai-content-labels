@@ -1,13 +1,14 @@
 import { writeFileSync, mkdirSync, copyFileSync, existsSync, statSync, readFileSync } from 'node:fs';
 import { dirname, extname, join, basename, resolve } from 'node:path';
-import { renderLabel, officialIcon, normalize, labelSentence, composeAlt, altMissing } from './render.mjs';
+import { renderLabel, officialIcon, normalize, formOf, labelSentence, composeAlt, altMissing } from './render.mjs';
 import { renderHtml, LABEL_CSS } from './html.mjs';
-import { stampImage, stampBuffer, loadSharp, formatFor } from './stamp.mjs';
+import { stampImage, stampBuffer, placeLabel, defaultForm, loadSharp, formatFor } from './stamp.mjs';
 import { isUrl, fetchImage, decodeBase64 } from './source.mjs';
 import { decide } from './decide.mjs';
 import { UsageError, sentence, parseBoolean } from './i18n.mjs';
 import { ASSETS_DIR, mediaIcons } from './assets.mjs';
 import { parseColor } from './color.mjs';
+import { VERSION } from './version.mjs';
 
 // The operations behind both the CLI and the MCP server.
 
@@ -29,6 +30,7 @@ export async function render(opts = {}) {
   // alt is for the content the label describes (null without a description); labelAlt is the alt of
   // an <img> that shows this label on its own.
   const result = {
+    version: VERSION,
     width: label.width,
     height: label.height,
     alt: label.alt,
@@ -52,10 +54,10 @@ export async function render(opts = {}) {
 // --format html: real text for web pages. --css alone prints the stylesheet the snippet needs.
 async function renderHtmlLabel(opts) {
   if (opts.scale != null) throw new UsageError('--scale applies to PNG and WebP, not to --format html');
-  if (parseBoolean(opts.css, '--css')) return { css: LABEL_CSS };
+  if (parseBoolean(opts.css, '--css')) return { version: VERSION, css: LABEL_CSS };
   const label = renderHtml(opts);
   const { html, css, ...rest } = label;
-  const result = { html, css, ...rest };
+  const result = { version: VERSION, html, css, ...rest };
   if (opts.out) {
     const out = resolve(opts.out);
     const ext = extname(out).toLowerCase();
@@ -72,15 +74,15 @@ const inFlight = new Set();
 
 // The label is a public claim burned into the file: never default it. render keeps a default kind,
 // because it writes nothing into the user's content.
-function requireKind(opts) {
+function requireKind(opts, command = 'stamp') {
   if (opts.kind == null) {
     throw new UsageError(
-      'stamp needs --kind generated, modified, basic or human. Not sure which? Run: ai-labels decide --media image --origin generated|modified|assisted|human'
+      `${command} needs --kind generated, modified, basic or human. Not sure which? Run: ai-labels decide --media image --origin generated|modified|assisted|human`
     );
   }
   // Label options first: a contradictory label is the user's first problem, not an existing output.
   // auto colour and theme are resolved from the image later; here only the label is checked.
-  normalize({ ...opts, height: opts.height ?? 32, color: parseColor(opts.color) === 'auto' ? undefined : opts.color, theme: opts.theme === 'auto' ? undefined : opts.theme });
+  normalize({ ...opts, height: opts.height ?? 32, color: parseColor(opts.color) === 'auto' ? undefined : opts.color, theme: opts.theme === 'auto' ? undefined : opts.theme, ...(formOf(opts) == null && { form: defaultForm(opts) }) });
 }
 
 export async function stamp(input, opts = {}) {
@@ -143,6 +145,7 @@ export async function resolveSource(opts, { allowFiles = true, allowPrivate = tr
 export async function stampFrom(opts = {}, policy = {}) {
   requireKind(opts);
   if (opts.out != null && policy.allowFiles === false) throw new UsageError(FILES_OFF);
+  noMaskFile(opts, policy);
   const want = parseBoolean(opts.returnImage, 'return_image') ?? false;
   const src = await resolveSource(opts, policy);
   let result;
@@ -154,6 +157,28 @@ export async function stampFrom(opts = {}, policy = {}) {
   }
   const mimeType = formatFor(result.output).mime;
   return { result: { ...result, mimeType }, image: want ? { buffer: readFileSync(result.output), mimeType } : null };
+}
+
+// --region-mask is a file path; with file paths off (HTTP mode) only --region-path can give a shape.
+function noMaskFile(opts, policy) {
+  if (typeof opts.regionMask === 'string' && opts.regionMask !== '' && policy.allowFiles === false) {
+    throw new UsageError(`${FILES_OFF}. For a shape, pass region_path (SVG path data) instead of region_mask`);
+  }
+}
+
+// Where the label goes on an image and the render arguments that draw it, without writing anything:
+// for pages and UI that draw the label as HTML or SVG over the image. The image comes as for stampFrom.
+export async function placeFrom(opts = {}, policy = {}) {
+  requireKind(opts, 'place');
+  noMaskFile(opts, policy);
+  const src = await resolveSource(opts, policy);
+  if (src.path) {
+    const file = resolve(src.path);
+    if (!existsSync(file)) throw new UsageError(`input not found: ${src.path}`);
+    if (statSync(file).isDirectory()) throw new UsageError('input is a folder; place takes one image');
+    return placeLabel(file, opts);
+  }
+  return placeLabel(src.buffer, opts);
 }
 
 export function decideLabel(opts) {

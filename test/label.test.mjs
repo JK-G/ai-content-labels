@@ -113,7 +113,10 @@ test('stampBuffer keeps the input format and the marker stops a second stamp', {
     .toBuffer();
   const once = await stampBuffer(png, { kind: 'generated', media: ['image'] });
   assert.equal(once.mimeType, 'image/png');
-  assert.equal(once.label.theme, 'light');
+  // The icon on a dark image: the white disc (theme dark, as in the dark pill).
+  assert.equal(once.label.form, 'icon');
+  assert.equal(once.label.disc, 'white');
+  assert.equal((await stampBuffer(png, { kind: 'generated', media: ['image'], short: true })).label.theme, 'light');
   await assert.rejects(stampBuffer(once.buffer, { kind: 'generated' }), /already labelled as generated/);
   const webp = await stampBuffer(png, { kind: 'generated', format: 'webp' });
   assert.equal((await sharp(webp.buffer).metadata()).format, 'webp');

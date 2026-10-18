@@ -1,6 +1,7 @@
 import { decide } from './decide.mjs';
 import { stampFrom } from './api.mjs';
 import { UsageError, parseBoolean } from './i18n.mjs';
+import { VERSION } from './version.mjs';
 
 // One call for an agent that has just generated or edited an image: decide which label the image
 // needs (media image, origin generated, or modified with opts.modified), then stamp that label.
@@ -9,9 +10,7 @@ import { UsageError, parseBoolean } from './i18n.mjs';
 // AI images is good practice; opts.onlyIfRequired skips the stamp when the label is not a duty.
 
 // Options passed on to the stamp. kind, media and lang come from decide.
-const STAMP_OPTIONS = ['description', 'text', 'position', 'region', 'displayWidth', 'color', 'out', 'force', 'metadata', 'returnImage', 'minimal', 'short', 'full', 'theme', 'uppercase', 'inputBase64', 'mime'];
-// The form the caller chose wins over the one decide suggests.
-const FORM_OPTIONS = ['minimal', 'short', 'full'];
+const STAMP_OPTIONS = ['description', 'text', 'position', 'region', 'regionMask', 'regionPath', 'avoid', 'safeZone', 'palette', 'displayWidth', 'color', 'out', 'force', 'metadata', 'returnImage', 'form', 'icon', 'minimal', 'short', 'full', 'theme', 'uppercase', 'inputBase64', 'mime'];
 
 export class NeedsAnswer extends UsageError {
   constructor(decision) {
@@ -32,7 +31,7 @@ export async function labelImage(input, opts = {}, policy = {}) {
   const modified = parseBoolean(opts.modified, 'modified') ?? false;
   const decision = decide({ media: 'image', origin: modified ? 'modified' : 'generated', realistic: opts.realistic, creative: opts.creative, lang: opts.lang });
   if (decision.required === 'unknown') throw new NeedsAnswer(decision);
-  const head = { verdict: decision.verdict, required: decision.required, officialIcon: decision.officialIcon };
+  const head = { version: VERSION, verdict: decision.verdict, required: decision.required, officialIcon: decision.officialIcon };
   const onlyIfRequired = parseBoolean(opts.onlyIfRequired, 'only_if_required') ?? false;
   if (onlyIfRequired && !decision.required) {
     return {
@@ -47,7 +46,6 @@ export async function labelImage(input, opts = {}, policy = {}) {
   }
   const stampOpts = Object.fromEntries(STAMP_OPTIONS.filter((k) => opts[k] != null).map((k) => [k, opts[k]]));
   const suggested = { ...decision.next.arguments };
-  if (FORM_OPTIONS.some((k) => opts[k] != null)) delete suggested.minimal;
   const { result, image } = await stampFrom({ ...stampOpts, ...suggested, input: input ?? undefined }, policy);
   const notes = [];
   if (!decision.required) notes.push('The label is voluntary here and was stamped as good practice; pass only-if-required to skip voluntary labels.');

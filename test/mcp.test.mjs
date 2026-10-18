@@ -92,7 +92,8 @@ test('decide_label returns "unknown" with a question when a deciding fact is mis
   assert.equal(json(r[2]).required, false);
   assert.equal(unknown.next, undefined);
   // A voluntary label: the smallest form.
-  assert.deepEqual(json(r[2]).next.arguments, { kind: 'generated', media: ['image'], lang: 'en', minimal: true });
+  // No form: stamp_image uses the EU icon by default.
+  assert.deepEqual(json(r[2]).next.arguments, { kind: 'generated', media: ['image'], lang: 'en' });
 });
 
 test('decide_label hands over the next call: tool, arguments to pass unchanged, arguments to fill in', async () => {

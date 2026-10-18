@@ -1,3 +1,4 @@
+import { VERSION } from './version.mjs';
 import { UsageError, sentence, parseBoolean, strings, LANGS } from './i18n.mjs';
 
 // Which label a piece of content needs under Article 50(4) of the EU AI Act, read together with the
@@ -59,6 +60,7 @@ export function decide(input = {}) {
     if (missing) {
       const label = { kind: origin, media: [media], lang };
       return {
+        version: VERSION,
         required: 'unknown',
         missing,
         question: QUESTIONS[missing],
@@ -71,6 +73,7 @@ export function decide(input = {}) {
   }
 
   const out = {
+    version: VERSION,
     required: false,
     verdict: '',
     basis: '',
@@ -161,7 +164,7 @@ export function decide(input = {}) {
   const placement = {
     image: [
       'Burn the label into the image pixels (the `stamp` command), so it stays visible when the image is downloaded or reshared.',
-      "stamp puts the label in the least invasive spot, with nothing covering it: the bottom-right corner when it is free, else the bottom centre or bottom left, else the top edge. If only part of the image is AI (a generated photo inside a designed graphic), pass --region with that part's box and the label goes on that part. For social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then stamp, so the label sits inside every crop; the automatic size is the smallest that stays legible full width on a phone.",
+      "stamp puts the label in the least invasive spot, with nothing covering it: the bottom-right corner when it is free, else the bottom centre or bottom left, else the top edge. If only part of the image is AI (a generated photo inside a designed graphic), pass --region with that part's box (or --region-path with its outline, for a shield or circle) and the label goes on that part. The automatic spot sees only texture: pass --avoid boxes for faces, people, the product and text. For social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then stamp, so the label sits inside every crop; the automatic size is the smallest that stays legible full width on a phone.",
     ],
     video: [
       'Show the label from the first frame, repeat it at regular intervals where possible and at least after every break (such as an ad break), so people who join mid-way still see it (Code Sub-measure 1.2.2(b); Guidelines para 143). The Code also encourages keeping it on screen for the whole video or the whole AI part; this project recommends that, as the simplest way to cover every viewer.',
@@ -185,18 +188,16 @@ export function decide(input = {}) {
 }
 
 // The command to run after decide: the MCP tool with the arguments to pass unchanged, the arguments
-// still to fill in (MCP names), and the same step as a CLI line. A voluntary AI label takes the
-// smallest form (minimal: the EU disc and the content-type icons); a required or human-made one keeps
-// a word, the default short form. `ai-labels` is the package's command
-// (also installed as `ai-content-labels`); in a copied skill it is node <skill>/scripts/ai-labels.mjs.
-export function nextStep(label, disclosure, { minimal = false } = {}) {
+// still to fill in (MCP names), and the same step as a CLI line. It names no form: stamp, label
+// and place use the EU icon alone for an AI label, and a human-made label keeps its word.
+// `ai-labels` is the package's command (also installed as `ai-content-labels`); in a copied skill
+// it is node <skill>/scripts/ai-labels.mjs.
+export function nextStep(label, disclosure) {
   const own = disclosure == null; // no built-in wording: the user writes the label text
   const flags =
     `--kind ${label.kind} --media ${label.media.join(',')}` +
     (label.lang !== 'en' ? ` --lang ${label.lang}` : '') +
-    (minimal ? ' --minimal' : '') +
     (own ? ' --text "label in that language"' : '');
-  if (minimal) label = { ...label, minimal: true };
   const text = own ? ['text'] : [];
   switch (label.media[0]) {
     case 'image':
@@ -238,13 +239,10 @@ function finish(out, media, lang) {
   );
   if (out.label) {
     out.disclosure = said;
-    const minimal = out.required === false && out.label.kind !== 'human';
-    out.next = nextStep(out.label, said, { minimal });
-    if (out.label.kind !== 'human') {
+    out.next = nextStep(out.label, said);
+    if (out.label.kind !== 'human' && media === 'image') {
       out.notes.push(
-        minimal
-          ? 'The label is voluntary, so the next step uses the smallest form (minimal): the EU "AI" disc and the content-type icon, with the words in the alt text. Leave minimal out for a label with a word.'
-          : 'The next step uses the short form: the EU "AI" disc with "Generated" or "Modified", the wording of the EU icons. Use minimal (no word) only when a caption next to the content says the label sentence.'
+        'A stamped image gets the EU "AI" icon alone: Measure 1.1(a) of the Code of Practice asks for the icon with the letters "AI", and a word such as "Generated" is only encouraged (1.1(b)). Add --short when the user wants the word. Put the label sentence in the alt text and, for a deep fake, in a visible caption too.'
       );
     }
     if (said == null) {

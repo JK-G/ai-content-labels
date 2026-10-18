@@ -151,7 +151,8 @@ test('stamp: a given colour is used as is; auto takes the accent and keeps 4.5:1
   const given = await stampBuffer(input, { kind: 'generated', media: 'image', color: '#1f7a52', position: 'bottom-left', format: 'png' });
   assert.equal(given.label.theme, 'custom');
   assert.deepEqual(given.label.color, { background: '#1f7a52', ink: '#ffffff', source: 'given' });
-  const px = await sharp(given.buffer).extract({ left: given.label.left + 2, top: given.label.top + Math.round(given.label.height / 2), width: 1, height: 1 }).raw().toBuffer();
+  // The pill between the disc and the word: a small pill has a thin inset, so the disc nearly meets its edge.
+  const px = await sharp(given.buffer).extract({ left: given.label.left + Math.round(given.label.height * 1.08), top: given.label.top + Math.round(given.label.height / 2), width: 1, height: 1 }).raw().toBuffer();
   assert.deepEqual([...px].slice(0, 3), parseHex('#1f7a52'));
   const auto = await stampBuffer(input, { kind: 'generated', media: 'image', color: 'auto' });
   assert.equal(auto.label.color.source, 'auto');
@@ -164,12 +165,14 @@ test('stamp: a given colour is used as is; auto takes the accent and keeps 4.5:1
   await assert.rejects(stampBuffer(input, { kind: 'generated', color: '#1f7a52', theme: 'dark' }), /--theme or --color/);
 });
 
-test('label_image: a voluntary label is minimal, a required one short, and the caller can pick', { skip: noSharp }, async () => {
+test('label_image: the EU icon alone, required or voluntary, and the caller can pick', { skip: noSharp }, async () => {
   const input = await graphic();
   const voluntary = await labelImage(input, { realistic: false });
-  assert.equal(voluntary.label.form, 'minimal');
+  assert.equal(voluntary.label.form, 'icon');
   const required = await labelImage(input, { realistic: true });
-  assert.equal(required.label.form, 'short');
+  assert.equal(required.label.form, 'icon');
+  assert.equal((await labelImage(input, { realistic: true, short: true })).label.form, 'short');
+  assert.equal((await labelImage(input, { realistic: true, form: 'minimal' })).label.form, 'minimal');
   assert.equal((await labelImage(input, { realistic: false, full: true })).label.form, 'full');
   assert.equal((await labelImage(input, { realistic: false, minimal: false })).label.form, 'short');
   assert.equal((await labelImage(input, { realistic: true, minimal: true })).label.form, 'minimal');
@@ -185,7 +188,9 @@ test('review fixes: theme auto is accepted, short with minimal is refused, a shr
   const banner = await sharp({ create: { width: 4000, height: 300, channels: 3, background: '#dddddd' } }).png().toBuffer();
   const wide = await stampBuffer(banner, { kind: 'generated', media: 'image' });
   assert.ok(wide.label.displayHeight < 24);
-  assert.match(wide.warning, /under the legible 24 px/);
+  assert.match(wide.warning, /under the legible 18 px\. Put the label next to the image$/);
+  const wideWord = await stampBuffer(banner, { kind: 'generated', media: 'image', short: true });
+  assert.match(wideWord.warning, /under the legible 18 px\. Use the icon form \(--form icon\) or put the label next to the image$/);
 });
 
 test('review fixes: no accent from empty data; an accent pill that would blend in falls back to neutral', { skip: noSharp }, async () => {

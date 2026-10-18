@@ -145,9 +145,12 @@ test('empty, duplicated and contradictory input is refused or cleaned', () => {
   assert.throws(() => renderLabel({ full: true, minimal: true }), /--full and --minimal contradict/);
 });
 
-test('labels with text are at least 24 px; minimal ones at least 20', () => {
-  assert.throws(() => renderLabel({ height: 20 }), /at least 24 px tall.*--minimal/);
+test('labels with text and the icon are at least 18 px; minimal ones at least 20', () => {
+  assert.throws(() => renderLabel({ height: 17 }), /a label with text must be at least 18 px tall/);
+  assert.doesNotThrow(() => renderLabel({ height: 18 }));
   assert.doesNotThrow(() => renderLabel({ height: 24 }));
+  assert.throws(() => renderLabel({ form: 'icon', height: 17 }), /the icon must be at least 18 px/);
+  assert.doesNotThrow(() => renderLabel({ form: 'icon', height: 18 }));
   assert.doesNotThrow(() => renderLabel({ height: 20, minimal: true, media: 'image', human: 'text' }));
   assert.throws(() => renderLabel({ height: 19, minimal: true }), /between 20 and 512/);
 });

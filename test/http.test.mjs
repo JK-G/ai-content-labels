@@ -74,7 +74,7 @@ test('HTTP mode: legacy initialize, tools/list, a notification gets 202, GET and
   assert.equal(note.status, 202);
   assert.equal(note.body, '');
   const list = await send(url, { body: rpc(2, 'tools/list') });
-  assert.equal(list.json.result.tools.length, 5);
+  assert.equal(list.json.result.tools.length, 6);
   const decide = await send(url, { body: rpc(3, 'tools/call', { name: 'decide_label', arguments: { media: 'image', origin: 'generated', realistic: true } }) });
   assert.equal(decide.json.result.structuredContent.required, true);
   assert.equal((await send(url, { method: 'GET' })).status, 405);
@@ -215,7 +215,7 @@ test('HTTP mode: a malformed request line gets an error and the server keeps run
   }
   const after = await send(url, { body: rpc(1, 'tools/list') });
   assert.equal(after.status, 200);
-  assert.equal(after.json.result.tools.length, 5);
+  assert.equal(after.json.result.tools.length, 6);
 });
 
 test('HTTP mode: parse and shape errors carry id null; a modern request with a legacy version gets -32022', async () => {

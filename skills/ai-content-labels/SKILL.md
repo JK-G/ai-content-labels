@@ -3,7 +3,7 @@ name: ai-content-labels
 description: Label content as AI-generated, AI-modified or human-made with the official EU icons, and work out what Article 50 of the EU AI Act asks for. Use right after you generate or edit an image that will be published, and when the user asks to label, mark, tag, badge or disclose AI content or human-made content, in any wording or language (AI label, AI badge, "generated with AI" watermark, made by a human, AI Act labelling, Article 50 disclosure; Polish - oznacz jako AI, plakietka AI, oznaczenie treści AI, znak AI Act, stworzone przez człowieka), when they ask whether something must be labelled under the AI Act, and when an image, video, audio or text made or edited with AI is about to be published in a project that labels AI content. Labels an image in one call, draws HTML, SVG or PNG labels for pages and UI, and returns the alt text to publish with the content.
 license: MIT
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   homepage: https://github.com/JK-G/ai-content-labels
 ---
 
@@ -22,8 +22,8 @@ missing, the same CLI runs with no install: `npx -y -p github:JK-G/ai-content-la
 
 `decide` writes its next command as `ai-labels ...`, the name the package installs (also as
 `ai-content-labels`); here it means the `node` line above. If the ai-content-labels MCP server is
-connected, the tools `label_image`, `decide_label`, `render_label`, `stamp_image` and `eu_icon` do
-the same. `help` lists every option. Stamping and PNG output need `sharp`. When `doctor` reports it
+connected, the tools `label_image`, `decide_label`, `render_label`, `stamp_image`, `place_label` and
+`eu_icon` do the same. `help` lists every option. Stamping and PNG output need `sharp`. When `doctor` reports it
 missing, run the install command it prints (it knows whether this skill sits in a clone of the
 repository or was copied on its own), or use the `npx` line above.
 
@@ -47,7 +47,8 @@ node scripts/ai-labels.mjs label image.png --realistic --description "what it sh
   `--only-if-required` skips the stamp when the AI Act does not require the label.
 - `--lang pl` for a Polish label; `--out` for the output path (default `<name>.ai-label.<ext>` next
   to the image). Form, size, spot and colour follow the defaults in the next section: add `--region`
-  when only part of the image is AI, and `--color auto` for a branded graphic.
+  (or `--region-path`) when only part of the image is AI, `--avoid` for what the label must not
+  cover, and `--color auto` or `--palette` for a branded graphic.
 - Then publish the `alt` it returns, as in step 4 below. For anything else (video, audio, text, an
   image someone else made, a human-made label) use the full workflow.
 
@@ -57,14 +58,17 @@ Always label in the smallest legible form that fits the case, in the spot where 
 unless the user asks for something else or you have a stated reason. The tools do this by default, so
 mostly it means: do not override the defaults without a reason.
 
-- **Form.** A voluntary AI label is minimal: the EU "AI" disc and the content-type icons, with the
-  words in the alt text (`label` and `decide` set `--minimal` for you). A required label keeps one
-  word, the short default ("Generated", "Modified", the wording of the EU icons); make it minimal only
-  when a caption next to the content says the label sentence in words. Human-made labels keep their
-  words, because a hand alone is not a sign people know. `--full` ("Generated with AI") only when
-  the user asks for it.
-- **Size.** The automatic size is the smallest legible one: 24 px tall with text, 20 px minimal, as
-  the image is shown full width on a phone (390 CSS px). Do not pass `--height` to make it smaller.
+- **Form.** Every AI label, required or voluntary, is the EU "AI" icon alone by default (`stamp`,
+  `label` and `place` do this for you), with the words in the alt text. The Code of Practice asks
+  for the icon with the letters "AI" (Measure 1.1(a)); a word is only encouraged (1.1(b)). Add the
+  word with `--short` ("Generated", "Modified") when the user wants it, or on feed ads (see "Which
+  label"). Human-made labels keep their words, because a hand alone is not a sign people know.
+  `--full` ("Generated with AI") only when the user asks for it. For a deep fake, also put the label
+  sentence in a visible caption.
+- **Size.** The automatic size is the smallest legible one: 18 px tall for the icon and for a label
+  with a word, 20 px for `--minimal`, as the image is shown full width on a phone (390 CSS px). At
+  that distance an 18 px badge carries letters the EU minimum eyesight for driving can read, and
+  the word is set at 10.5 px or more. Do not pass `--height` to make it smaller.
   Pass `--display-width` only when you know the width it is shown at: larger for a page that is never
   seen on a phone, smaller for a grid of thumbnails.
 - **Place.** Leave `--position` at `auto`: the bottom-right corner when it is free, else the freer
@@ -75,13 +79,57 @@ mostly it means: do not override the defaults without a reason.
   designed ad) and the label should mark that element, pass its box: `--region x,y,width,height` in
   px or in % of the image (`50%,35%,46%,57%`). If you composed the graphic you know the box;
   otherwise estimate it from the image. For a rounded or angled element (a photo in a shield or
-  circle), pass a box that lies inside it, or a corner of the box may fall outside the element. The
-  label goes on that element, in its least invasive spot;
-  use `--kind generated` for an element AI made whole.
-- **Colour.** Neutral (white or dark pill) by default. For a branded graphic, such as an ad or a
-  social post with a brand palette, use `--color auto`: the label takes the image's accent colour,
-  toned to keep 4.5:1 contrast. Use `--color #hex` when the user names a colour. Keep the default on
-  plain photos.
+  circle), pass its shape instead of a box: `--region-path "M300 200 H780 V800 L540 1000 L300 800 Z"`
+  (the clip path in image px, as in your HTML or SVG template) or `--region-mask mask.png` (its
+  alpha, or its brightness when it has no transparency). The label and its margin then stay inside
+  the shape. The label goes on that element, in its least invasive spot; use `--kind generated` for
+  an element AI made whole.
+- **What to keep clear.** Look at the image yourself before you stamp or place. The automatic spot
+  sees only texture, so a smooth back, a face in soft light or a clean product surface can look
+  free. Pass `--avoid x,y,width,height` (px or %, once per box) for faces, people, the product or
+  subject, and text. The result lists every spot that was not taken and why (`label.why`). If no
+  spot is left, the command stops with the reasons: try the icon form, smaller avoid boxes or a
+  `--position` you checked.
+- **Safe zones.** For a story or reel, keep the label out of the platform's buttons and captions
+  with `--safe-zone`. `meta-reels` is built in (14% top, 35% bottom, 6% sides, from the Meta Ads
+  Guide for Instagram Reels, checked 2026-10-18); it is not a source for Stories. For any other
+  platform, take the insets from the platform's own template and pass them as
+  `--safe-zone top,right,bottom,left` in px or %. Do not guess them.
+- **Colour.** The icon is the official EU disc in black or white, whichever stands out more from the
+  spot, and takes no colour. A label in brand colours is a pill with the word, which a colour gives
+  you without `--short`. When the user or the brand guide gives brand colours for it, pass them:
+  `--color #hex` for one, or `--palette #hex,#hex` to let the tool pick the one that stands out
+  most from the spot (used exactly as given; neutral when none stands out). Without
+  a known brand colour, for a branded graphic such as an ad or a social post, use `--color auto`:
+  the accent colour of the image, toned to keep 4.5:1 contrast. `auto` reads the whole image, or
+  with a region the designed part outside it when that part is at least 20% of the image
+  (`label.color.sampled` says which). Keep the icon on plain photos.
+
+### HTML pages, ad templates and UI
+
+When the label is drawn as HTML or SVG over an image (a landing page hero, an ad rendered from HTML
+to PNG, an app card), do not stamp the image. Run `place` (MCP `place_label`) on the image as it
+will be shown, with the same options you would give `stamp`:
+
+```
+node scripts/ai-labels.mjs place hero.png --kind generated --media image --region-path "..." --avoid 120,80,300,400 --json
+```
+
+It writes nothing and returns `box` (px), `boxPercent` (% of the image: `left`, `top`, `width`,
+`height`, `right`, `bottom` and `anchor`) and `renderArgs`, the `render` options that draw the
+same label. Put the label in the image's container (`position: relative`) and pin it by the sides
+`boxPercent.anchor` names: a bottom-right label with CSS `right` and `bottom` from `boxPercent`, a
+top-left one with `left` and `top`, a centre one centred. Then it stays in its corner even when the
+drawn label is not exactly `box.width` wide.
+
+- As SVG: `render` with `renderArgs`, and its width set to `boxPercent.width`%, so it scales
+  with the image.
+- As HTML: `render --format html` with `renderArgs`, but `--height` set to `label.cssHeight`: the
+  label's height in CSS px where the image is shown (`label.displayWidth`; pass `--display-width`
+  to `place` when the image is not shown full width on a phone). The pill (or the icon) is then
+  exactly that tall. It must be at least 18, 20 for minimal.
+
+Keep the label sentence in the alt text or caption as in step 4.
 
 ## Workflow
 
@@ -123,14 +171,16 @@ mostly it means: do not override the defaults without a reason.
      follow the defaults above. It stamps one still file per run and refuses to overwrite or to
      stamp a labelled file again unless you pass `--force`.
    - For social posts, crop to the platform's final aspect first (Instagram 4:5 or 1:1), then
-     stamp, so the label sits inside every crop. The result's `label.displayHeight` says how tall
-     the label looks on a phone. A `warning` in the result means the label had to shrink to fit (a wide
-     banner, a small region): tell the user, and use `--minimal`, a larger region or a label next to
-     the image.
+     stamp, so the label sits inside every crop. For stories and reels add `--safe-zone`. The
+     result's `label.displayHeight` says how tall the label looks on a phone. A `warning` in the
+     result means the label had to shrink to fit (a wide banner, a small region): tell the user,
+     and use the icon form, a larger region or a label next to the image.
    - A folder of images: run `decide` once per distinct kind of content, then stamp each file with
      its own `--description`, and report one table: file, output, alt text.
    - Web page or app: use `render --format html` (real text: zooms, reflows, translates) and put
-     the CSS from `render --format html --css` on the page once. The HTML label follows the page's
+     the CSS from `render --format html --css` on the page once. For a label over an image, get
+     the spot and the options from `place` first (see "HTML pages, ad templates and UI"). The
+     HTML label follows the page's
      color-scheme (light unless the page declares light dark); force it with `--theme`. Use SVG or
      PNG (`render ... --out label.svg`) for images, video overlays and places that only accept an
      image.
@@ -172,6 +222,7 @@ mostly it means: do not override the defaults without a reason.
 | AI was involved and you want your own wording | `--kind basic --text "Voice generated with AI"` |
 | Made by a person, confirmed by the user | `--kind human --media text,image`. If the person wants to place the label by hand, point them to the ready-made files in `labels/human-made` of the repository (or the `human-made-labels.zip` release asset) instead |
 | AI image with a human-written text | `--kind generated --media image --human text` |
+| An ad or post in a feed, where the caption may be cut off ("See more") or limited to a short text field | Add `--short`, so the word is on the image. The label sentence must be seen at first exposure (Code of Practice Sub-measure 1.2.1), and text below the fold is not. Keep the icon alone only when the sentence is in the first visible line of the caption |
 | A human-made layout, mockup or collage containing an AI-generated element | Run decide with `--realistic` for the element. To mark just that element, stamp the whole graphic with `--kind generated --media image --region <the element's box>`; if the post is about the visualisation, crop to the element and stamp that; to label the design as a whole, use `--kind modified --media image` with `--description` naming the AI part |
 
 - `--media` lists only the parts that are AI (or, with `--kind human`, the parts made by a person).
@@ -180,12 +231,14 @@ mostly it means: do not override the defaults without a reason.
   another EU language pass `--lang` with `--text` in that language (plain words, no abbreviation
   other than "AI"), e.g. `--lang de --text "Mit KI generiert"`. The sentence is then your text
   alone, so name the part in it ("Stimme mit KI generiert").
-- The short wording ("Generated") is the default; `--full` gives "Generated with AI".
-- `--minimal` drops the text: the author mark (EU "AI" disc, or a hand in the same disc) plus the
-  content-type icons. It is the form for voluntary labels and for spots too small for text
-  (thumbnails, avatars, UI chips; labels with text need at least 24 px, minimal ones 20 px). For a
-  required label, use it only with the label sentence in a visible caption. Without text,
-  "generated" and "modified" look the same, so the alt text must carry the difference.
+- Forms (`--form icon|minimal|short|full`, or `--icon`, `--minimal`, `--short`, `--full`): the icon
+  is the default of `stamp`, `label` and `place` for AI labels; `--short` adds one word
+  ("Generated"), `--full` the phrase "Generated with AI". `render` keeps the short form as its
+  default. A pill colour (`--color`, `--palette`) and a human-made part need a pill, so they get the
+  short form.
+- `--minimal` drops the text but keeps the pill: the author mark (EU "AI" disc, or a hand in the
+  same disc) plus the content-type icons, at least 20 px. Without text, "generated" and "modified"
+  look the same, in the icon and the minimal form alike, so the alt text must carry the difference.
 - The hand mark is this project's design, not an EU icon. It has no meaning under the AI Act.
   Where you use it, explain it once (a legend, caption or an "about our labels" page).
 - The untouched EU files: `eu generated --variant black --out ai-generated.svg` (also `basic`,

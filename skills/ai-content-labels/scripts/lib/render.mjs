@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { euBasic, mediaIcons, handMark, euFile } from './assets.mjs';
 import { textPaths, measure, capHeight, missingGlyphs, round } from './text.mjs';
-import { worstCaseContrast, WCAG } from './contrast.mjs';
+import { worstCaseContrast, contrastRatio, parseHex, WCAG } from './contrast.mjs';
 import { strings, sentence, parseBoolean, hasWording, noWording, KINDS, MEDIA, UsageError } from './i18n.mjs';
 import { parseColor, colorTheme } from './color.mjs';
 export { POSITIONS } from './place.mjs';
@@ -21,17 +21,38 @@ const toList = (v) => (v == null || v === '' ? [] : Array.isArray(v) ? v : Strin
 const clean = (v) => (v == null ? undefined : String(v).normalize('NFC').trim());
 const bool = (input, key, name) => parseBoolean(input[key], name) ?? false;
 
-// The forms of a label, smallest first: the author mark and icons alone, the mark with one word
-// ("Generated", "Modified", the wording of the EU icons), and the full wording ("Generated with AI").
-export const FORMS = ['minimal', 'short', 'full'];
+// The forms of a label, smallest first: the EU "AI" disc alone (icon), the author mark and the
+// content-type icons in a pill (minimal), the mark with one word ("Generated", "Modified", the
+// wording of the EU icons) and the full wording ("Generated with AI").
+export const FORMS = ['icon', 'minimal', 'short', 'full'];
+
+// The smallest legible height of each form, in CSS px as the label is seen. A just-recognisable
+// letter at the EU minimum driving acuity (0.5) is 10 arcmin; a phone read at 32 cm shows a CSS px
+// at about 1.77 arcmin, so letters need 5.65 CSS px. The EU disc's "AI" is 0.386 of the disc, so the
+// disc is 16 px (18 with its ring); a word set in Inter (x-height 0.546 em) needs 10.5 px type,
+// which an 18 px pill holds. The minimal pill keeps 20 px, so its content-type icons stay readable.
+export const MIN_HEIGHT = { icon: 18, text: 18, minimal: 20 };
+export const minHeightOf = (form) => (form === 'icon' ? MIN_HEIGHT.icon : form === 'minimal' ? MIN_HEIGHT.minimal : MIN_HEIGHT.text);
+
+// The form asked for: form (a name) or the booleans icon, minimal, short and full; null when none.
+// Two different forms are refused. short: false alone means the full wording.
+export function formOf(input = {}) {
+  const named = input.form == null || input.form === '' ? null : String(input.form).trim().toLowerCase();
+  if (named != null && !FORMS.includes(named)) throw new UsageError(`unknown form "${input.form}"; use one of: ${FORMS.join(', ')}`);
+  const flags = Object.fromEntries(FORMS.map((k) => [k, parseBoolean(input[k], `--${k}`)]));
+  const asked = [...new Set([named, ...FORMS.filter((k) => flags[k])].filter(Boolean))];
+  if (asked.length > 1) {
+    // Named as before: "--full and --minimal", "--short and --minimal", "--short and --icon".
+    const [a, b] = asked.sort((x, y) => FORMS.indexOf(y) - FORMS.indexOf(x));
+    throw new UsageError(`--${a} and --${b} contradict; pick one form`);
+  }
+  if (asked.length) return asked[0];
+  return flags.short === false ? 'full' : null;
+}
 
 export function normalize(input = {}) {
   const height = Number(input.height ?? 32);
-  const minimal = parseBoolean(input.minimal, '--minimal');
-  const short = parseBoolean(input.short, '--short');
-  const full = parseBoolean(input.full, '--full');
-  if (full && (minimal || short)) throw new UsageError(`--full and --${minimal ? 'minimal' : 'short'} contradict; pick one form`);
-  if (short && minimal) throw new UsageError('--short and --minimal contradict; pick one form');
+  const form = formOf(input) ?? 'short';
   if (Number.isNaN(height)) throw new UsageError('--height must be a number of px');
   if (!Number.isInteger(height)) throw new UsageError('--height must be a whole number of px (half pixels blur the label)');
   const o = {
@@ -44,11 +65,15 @@ export function normalize(input = {}) {
     description: clean(input.description) || undefined,
     // The short wording unless the full one is asked for: the smallest text that still says
     // generated or modified.
-    short: full || short === false ? false : true,
+    short: form !== 'full',
     uppercase: bool(input, 'uppercase', '--uppercase'),
     theme: input.theme ?? 'light',
     height,
-    minimal: minimal ?? false,
+    // The height the label is seen at, in CSS px, which picks the geometry; the drawing is then
+    // scaled to height. By default the two are the same.
+    designHeight: input.designHeight == null ? height : Number(input.designHeight),
+    minimal: form === 'minimal',
+    icon: form === 'icon',
     color: parseColor(input.color),
     backgroundOpacity: input.backgroundOpacity == null ? undefined : Number(input.backgroundOpacity),
     allowLowContrast: bool(input, 'allowLowContrast', '--allow-low-contrast'),
@@ -67,11 +92,23 @@ export function normalize(input = {}) {
   if (!THEMES[o.theme]) throw new UsageError(`unknown theme "${o.theme}"; use light or dark`);
   if (o.color === 'auto') throw new UsageError('--color auto matches the colours of an image, so it works with stamp and label; here pass a hex colour such as #1f7a52');
   if (o.color && input.theme != null && input.theme !== 'auto') throw new UsageError('pass --theme or --color, not both');
-  o.form = o.minimal ? 'minimal' : o.short ? 'short' : 'full';
-  // Text below 24 px tall is set at 6-8 px and nobody reads it; the minimal form has no text.
-  const min = o.minimal ? 20 : 24;
+  o.form = form;
+  const min = minHeightOf(form);
   if (!(o.height >= min && o.height <= 512)) {
-    throw new UsageError(o.minimal ? 'height must be between 20 and 512 px' : 'a label with text must be at least 24 px tall (up to 512); use --minimal for smaller spots');
+    throw new UsageError(
+      form === 'minimal'
+        ? 'height must be between 20 and 512 px'
+        : form === 'icon'
+          ? 'the icon must be at least 18 px tall (up to 512) to stay legible'
+          : 'a label with text must be at least 18 px tall (up to 512); its words need 10.5 px type'
+    );
+  }
+  if (!(o.designHeight > 0)) throw new UsageError('designHeight must be a positive number of px');
+  if (form === 'icon') {
+    // The icon is the official disc in black or white, with nothing next to it.
+    if (o.color) throw new UsageError('the icon form is the official EU disc in black or white; --color colours a pill: add --short or --minimal');
+    if (o.kind === 'human') throw new UsageError('the icon form is the EU "AI" disc; a human-made label keeps its words (--short) or the hand (--minimal)');
+    if (o.human.length) throw new UsageError('the icon form shows only the EU disc; to show the human-made part use --short or --minimal');
   }
   if (o.backgroundOpacity != null && !(o.backgroundOpacity >= 0 && o.backgroundOpacity <= 1)) {
     throw new UsageError('background opacity must be between 0 and 1');
@@ -88,6 +125,7 @@ export function normalize(input = {}) {
 // Renders a label. Returns the SVG, its size, the sentence for alt text, and the contrast it guarantees.
 export function renderLabel(input) {
   const o = normalize(input);
+  if (o.icon) return renderIcon(o);
   const theme = { ...(o.color ? colorTheme(o.color) : THEMES[o.theme]), ...(o.backgroundOpacity != null && { backgroundOpacity: o.backgroundOpacity }) };
   const contrast = worstCaseContrast(theme);
   if (contrast < WCAG.text && !o.allowLowContrast) {
@@ -97,12 +135,14 @@ export function renderLabel(input) {
   }
 
   const s = strings(o.lang);
-  const H = o.height;
+  // The geometry is laid out at the height the label is seen at (never under the form's minimum),
+  // then scaled to the output height: a stamp seen smaller than its file size keeps legible type.
+  const H = Math.max(o.designHeight, minHeightOf(o.form));
   const pills = [];
   const pick = (kind) => (o.short ? s[kind].short : s[kind].label);
-  pills.push(pill({ kind: o.kind, text: o.text ?? pick(o.kind), media: o.media, o, theme }));
+  pills.push(pill({ kind: o.kind, text: o.text ?? pick(o.kind), media: o.media, o, theme, H }));
   if (o.kind !== 'human' && o.human.length) {
-    pills.push(pill({ kind: 'human', text: o.humanText ?? pick('human'), media: o.human, o, theme }));
+    pills.push(pill({ kind: 'human', text: o.humanText ?? pick('human'), media: o.human, o, theme, H }));
   }
 
   // Whole-pixel widths and gaps, so every pill starts on a pixel edge.
@@ -118,11 +158,30 @@ export function renderLabel(input) {
     .join('');
 
   const disclosure = labelSentence(o);
-  const W = width;
+  // Laid out at the output height, as render does by default, the SVG is exactly as before.
+  const same = H === o.height;
+  const W = same ? width : Math.round((width * o.height) / H);
+  const box = same ? `viewBox="0 0 ${W} ${H}"` : `viewBox="0 0 ${width} ${round(H, 4)}" preserveAspectRatio="none"`;
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;height:auto" lang="${o.lang}" xml:lang="${o.lang}" role="img" aria-label="${xml(disclosure)}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${o.height}" ${box} style="max-width:100%;height:auto" lang="${o.lang}" xml:lang="${o.lang}" role="img" aria-label="${xml(disclosure)}">` +
     `<title>${xml(disclosure)}</title>${body}</svg>`;
-  return { svg, width: W, height: H, alt: composeAlt(o), disclosure, contrast: round(contrast, 2), wcag: contrast >= WCAG.text, options: o };
+  return { svg, width: W, height: o.height, alt: composeAlt(o), disclosure, contrast: round(contrast, 2), wcag: contrast >= WCAG.text, options: o };
+}
+
+// The icon form: the official EU disc alone, black (on light backdrops, theme light) or white
+// (theme dark), with a thin ring in the letters' colour so it holds on a backdrop of its own colour.
+// The ring is a sixteenth of the disc, so a 16 px disc is an 18 px badge.
+function renderIcon(o) {
+  const H = o.height;
+  const ring = H / 18;
+  const variant = THEMES[o.theme].eu;
+  const [disc, letters] = EU_COLORS[variant];
+  const contrast = contrastRatio(parseHex(letters), parseHex(disc));
+  const disclosure = labelSentence(o);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${H}" height="${H}" viewBox="0 0 ${H} ${H}" style="max-width:100%;height:auto" lang="${o.lang}" xml:lang="${o.lang}" role="img" aria-label="${xml(disclosure)}">` +
+    `<title>${xml(disclosure)}</title><circle cx="${round(H / 2)}" cy="${round(H / 2)}" r="${round(H / 2)}" fill="${letters}"/>${euDisc(ring, ring, H - 2 * ring, variant)}</svg>`;
+  return { svg, width: H, height: H, alt: composeAlt(o), disclosure, contrast: round(contrast, 2), wcag: contrast >= WCAG.text, options: o };
 }
 
 // The label as one sentence for screen readers: "Generated with AI: image. Made by a human: text."
@@ -154,19 +213,22 @@ export function altMissing(o, alt) {
 }
 
 // One pill: the author mark (EU "AI" disc, or a hand in the same disc), the text unless minimal, then the media icons.
-function pill({ kind, text, media, o, theme }) {
-  const H = o.height;
+function pill({ kind, text, media, o, theme, H }) {
   const shown = o.minimal ? '' : o.uppercase ? text.toLocaleUpperCase(o.lang) : text;
   const missing = missingGlyphs(shown);
   if (missing.length) throw new UsageError(`the bundled font has no glyph for: ${missing.join(' ')}`);
 
-  const inset = H * 0.125;
+  // Under 24 px a pill with words gets thinner padding instead of smaller type: the inset goes
+  // from 1 px at 18 to 3 px at 24 (0.125H there, as above), the type stays at 10.5 px or more and
+  // content-type icons at 10 px or more.
+  const compact = !o.minimal && H < 24;
+  const inset = compact ? 1 + (H - 18) / 3 : H * 0.125;
   const markBox = H - 2 * inset;
   // Slightly larger type on the smallest labels, where 0.4H would drop under 10 px.
   // Spaced capitals never below 10 px, so a 24 px upper-case label stays legible.
-  const fontSize = o.uppercase ? Math.max(10, H < 28 ? H * 0.37 : H * 0.34) : H < 28 ? H * 0.44 : H * 0.4;
+  const fontSize = o.uppercase ? Math.max(10, H < 28 ? H * 0.37 : H * 0.34) : compact ? Math.max(10.5, H * 0.44) : H < 28 ? H * 0.44 : H * 0.4;
   const tracking = o.uppercase ? 0.06 : 0;
-  const iconSize = H * 0.5;
+  const iconSize = compact ? Math.max(10, H * 0.5) : H * 0.5;
   const iconGap = H * 0.14;
 
   const mark = kind === 'human' ? (x) => handDisc(x + inset, inset, markBox, theme.eu) : (x) => euDisc(x + inset, inset, markBox, theme.eu);

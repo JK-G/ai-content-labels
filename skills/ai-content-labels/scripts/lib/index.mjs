@@ -3,9 +3,10 @@
 export { decide, nextStep, SOURCES } from './decide.mjs';
 export { renderLabel, officialIcon, labelSentence, composeAlt, POSITIONS, EU_ICONS, EU_VARIANTS } from './render.mjs';
 export { renderHtml, LABEL_CSS } from './html.mjs';
-export { stampImage, stampBuffer, labelledAs, autoHeight } from './stamp.mjs';
+export { stampImage, stampBuffer, placeLabel, labelledAs, autoHeight } from './stamp.mjs';
+export { SAFE_ZONES } from './place.mjs';
 export { labelImage, NeedsAnswer } from './label.mjs';
-export { render, stamp, stampFrom, alt, eu, icons, doctor } from './api.mjs';
+export { render, stamp, stampFrom, placeFrom, alt, eu, icons, doctor } from './api.mjs';
 export { fetchImage, decodeBase64, isPrivateAddress, MAX_BYTES } from './source.mjs';
 export { KINDS, MEDIA, EU_LANGS, UsageError } from './i18n.mjs';
 export { agentInstructions } from './init.mjs';

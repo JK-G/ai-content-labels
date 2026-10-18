@@ -4,10 +4,10 @@
 // statelessly as the 2026-07-28 revision describes (server/discover, resultType, serverInfo in the
 // result's _meta, UnsupportedProtocolVersion errors). Anything else is the legacy era: `initialize`,
 // then plain requests, exactly as in 0.1.0.
-import { render, decideLabel, eu, stampFrom, FILES_OFF } from './api.mjs';
+import { render, decideLabel, eu, stampFrom, placeFrom, FILES_OFF } from './api.mjs';
 import { labelImage } from './label.mjs';
 import { KINDS, MEDIA, EU_LANGS, UsageError } from './i18n.mjs';
-import { POSITIONS, EU_ICONS, EU_VARIANTS } from './render.mjs';
+import { POSITIONS, EU_ICONS, EU_VARIANTS, FORMS } from './render.mjs';
 import { VERSION } from './version.mjs';
 
 export const MODERN_VERSIONS = ['2026-07-28'];
@@ -27,6 +27,8 @@ const INSTRUCTIONS =
   'Label AI-generated and human-made content with the official EU icon. If you generated or edited an image yourself, call label_image right after: it decides the label and stamps it in one call; you only answer realistic honestly. ' +
   'For anything else call decide_label first; if it returns required:"unknown", ask the user its question and call it again. ' +
   "Then make the call in decide_label's next: next.tool with next.arguments unchanged, plus the arguments named in next.fill (stamp_image for image files, render_label with format html for web pages and UI). " +
+  'For an HTML page or UI where the label is drawn as HTML or SVG over an image, call place_label instead of stamp_image: it writes nothing and returns the spot (box, boxPercent with its anchor) and renderArgs; draw the label with render_label and those arguments at boxPercent. renderArgs.height is the height the label is laid out at, right for an SVG scaled to boxPercent.width; for format html the height is in CSS px: pass label.cssHeight. ' +
+  'Look at the image yourself and pass avoid boxes for faces, people, the product or subject, and text: the automatic spot sees only texture. ' +
   'Alt text = a short description of what the image shows, then the label sentence (disclosure); pass description so the result has it composed as alt. alt is null until you pass description; never publish disclosure as the alt of the image. ' +
   'render_label also returns labelAlt, the alt of an <img> that shows the label on its own. ' +
   'When the label is a legal duty, also put the sentence in a visible caption. If a stamp fails with NO_SHARP, show the user the install command from the error.';
@@ -39,15 +41,26 @@ const labelProps = {
   text: { type: 'string', description: 'Own label text instead of the default wording' },
   human_text: { type: 'string', description: 'Own text for the human-made part' },
   description: { type: 'string', description: 'What the image shows, one short phrase; it goes before the label sentence in the alt text' },
-  short: { type: 'boolean', description: 'One word next to the EU "AI" disc ("Generated", "Modified", the wording of the EU icons). The default form' },
-  full: { type: 'boolean', description: 'The full wording, e.g. "Generated with AI", instead of the short default' },
+  form: {
+    type: 'string',
+    enum: FORMS,
+    description:
+      'icon: the EU "AI" disc alone, 18 px, the default of stamp_image, label_image and place_label for AI labels (Code of Practice Measure 1.1(a)). minimal: the disc and the content-type icons in a pill. short: the disc and one word ("Generated", the wording of the EU icons), the default of render_label and of human-made labels. full: "Generated with AI". The booleans icon, minimal, short and full do the same',
+  },
+  icon: { type: 'boolean', description: 'Same as form: "icon"' },
+  short: { type: 'boolean', description: 'Same as form: "short": one word next to the EU "AI" disc. Add it when the user wants the word' },
+  full: { type: 'boolean', description: 'Same as form: "full": the full wording, e.g. "Generated with AI"' },
   uppercase: { type: 'boolean', description: 'Upper case with letter spacing, like the EU icons' },
   minimal: {
     type: 'boolean',
-    description: 'No text: only the author mark (EU "AI" disc, or a hand in the same disc) and the content-type icons. The smallest form: for voluntary labels, tight spots, or a required label whose sentence is in a visible caption',
+    description: 'Same as form: "minimal": the author mark (EU "AI" disc, or a hand in the same disc) and the content-type icons in a pill, no text',
   },
-  color: { type: 'string', description: 'Pill colour as hex, e.g. #1f7a52; the text turns white or dark to keep 4.5:1 contrast. stamp_image and label_image also take auto: the accent colour of the image, toned to keep 4.5:1' },
-  height: { type: 'integer', description: 'Label height in whole px: at least 24 with text, 20 with minimal' },
+  color: {
+    type: 'string',
+    description:
+      'Pill colour as hex, e.g. #1f7a52; the text turns white or dark to keep 4.5:1 contrast. stamp_image, label_image and place_label also take auto: the accent colour of the image (outside the region when one is given and the rest is at least 20% of the image), toned to keep 4.5:1. For a brand colour pass it as hex or in palette',
+  },
+  height: { type: 'integer', description: 'Label height in whole px: at least 18 (icon, or with text), 20 for minimal. With format html, the height in CSS px' },
 };
 
 const positionProp = {
@@ -57,7 +70,35 @@ const positionProp = {
 };
 const regionProp = {
   type: 'string',
-  description: 'Only part of the image is AI (a generated photo inside a designed graphic): its box as "x,y,width,height" in px or % of the image ("50%,35%,46%,57%"). The label goes on that part, in its least invasive spot. For a rounded or angled part, give a box that lies inside it',
+  description:
+    'Only part of the image is AI (a generated photo inside a designed graphic): its box as "x,y,width,height" in px or % of the image ("50%,35%,46%,57%"). The label goes on that part, in its least invasive spot. For a rounded or angled part, pass region_path or region_mask instead',
+};
+
+// The placement options that stamp_image, label_image and place_label share, next to region.
+const placeProps = {
+  region_mask: {
+    type: 'string',
+    description: `The AI part as a shape: a PNG mask, resized to the image, inside where its alpha (or, without transparency, its brightness) is 50% or more. The label lies fully inside the shape, with a margin. Not with region or region_path. ${PATH_NOTE}`,
+  },
+  region_path: {
+    type: 'string',
+    description: 'The AI part as a shape: SVG path data in image px, e.g. "M100 80 H700 V600 L400 900 L100 600 Z" for a shield. The label lies fully inside it, with a margin. Not with region or region_mask',
+  },
+  avoid: {
+    type: 'array',
+    items: { type: 'string' },
+    description:
+      'Boxes the label must not touch, each "x,y,width,height" in px or %: faces, people, the product or subject, text. Look at the image and pass them: the automatic spot sees only texture, so a smooth back or a clean product surface can look free',
+  },
+  safe_zone: {
+    type: 'string',
+    description: "Edges a platform covers with its buttons and captions: meta-reels (14% top, 35% bottom, 6% sides, from the Meta Ads Guide for Instagram Reels), or your own insets \"top,right,bottom,left\" in px or % from the platform's template",
+  },
+  palette: {
+    type: 'array',
+    items: { type: 'string' },
+    description: 'Brand colours as hex; the one that stands out most from the spot is used exactly as given, with white or dark text for 4.5:1. Not with color or theme',
+  },
 };
 
 // Where an image comes from and where the labelled one goes, for stamp_image and label_image.
@@ -72,7 +113,7 @@ const sourceProps = {
 const displayWidthProp = {
   type: 'integer',
   description:
-    'How wide the image will be shown, in CSS px; default 390, full width on a phone. The label is the smallest legible size there: 24 px tall with text, 20 px minimal. Pass a larger width only for images never shown full width on a phone. When the label has to shrink to fit, the result has a warning',
+    'How wide the image will be shown, in CSS px; default 390, full width on a phone. The label is the smallest legible size there: 18 px for the icon or a label with a word, 20 px minimal. Pass a larger width only for images never shown full width on a phone. When the label has to shrink to fit, the result has a warning',
 };
 
 const nullable = (type) => ({ type: [type, 'null'] });
@@ -84,22 +125,34 @@ const labelBox = {
     top: { type: 'integer' },
     width: { type: 'integer' },
     height: { type: 'integer' },
-    form: { type: 'string', enum: ['minimal', 'short', 'full'] },
+    form: { type: 'string', enum: FORMS },
+    disc: { type: 'string', description: 'For the icon form: black or white, the official variant used' },
     theme: { type: 'string', description: 'light, dark, or custom with color' },
-    color: { type: 'object', description: 'With color: background and ink (hex), source (auto or given) and, for auto, the accent found in the image' },
+    color: {
+      type: 'object',
+      description:
+        'The pill colour: background and ink (hex) and source: given (color as hex), auto (color auto) or palette. For auto also accent, the colour found in the image, and sampled: whole image, or outside the region',
+    },
     colorNote: { type: 'string' },
     position: { type: 'string' },
     placement: { type: 'string', description: 'auto or given' },
     reason: { type: 'string', description: 'Why auto placement chose this spot' },
-    spots: { type: 'object', description: 'How busy each spot is (mean brightness gradient); 6 or less counts as free' },
-    region: { type: 'object' },
+    spots: { type: 'object', description: 'How busy each spot is (mean brightness gradient); 6 or less counts as free. A spot outside the shape has no score' },
+    why: { type: 'object', description: 'For each spot not taken, why: busy, overlaps an avoid box, does not fit inside the shape, or a better free spot' },
+    region: { type: 'object', description: 'The box of the AI part; with region_mask or region_path, the bounding box of the shape' },
+    shape: { type: 'string', description: 'mask or path when the region is a shape' },
+    safeZone: { type: 'object', description: 'name (null for your own insets) and the insets top, right, bottom, left in px' },
+    avoid: { type: 'array', items: { type: 'object' } },
     separation: { type: 'number' },
     minDisplayWidth: { type: 'integer' },
     displayWidth: { type: 'integer' },
     displayHeight: { type: 'number' },
+    cssHeight: { type: 'integer', description: 'displayHeight rounded up to whole CSS px: the height for render_label with format html over the shown image' },
   },
 };
+const versionProp = { type: 'string', description: 'The ai-content-labels version that made this result' };
 const stampedProps = {
+  version: versionProp,
   output: { ...nullable('string'), description: 'Absolute path of the labelled file, or null when the image is returned as image content instead' },
   mimeType: { type: 'string' },
   image: { type: 'object', properties: { width: { type: 'integer' }, height: { type: 'integer' } } },
@@ -121,7 +174,7 @@ export const TOOLS = [
       'Call this right after you generate or edit an image that will be published. In one call it decides which label the EU AI Act asks for (media image, origin generated, or modified with modified:true) and burns that label into the image, then returns the alt text and the label sentence to publish with it. ' +
       'realistic is required: would the people who see it take it for a real photo or event? Answer honestly; ask the user if you cannot tell. ' +
       'It stamps a voluntary label too (labelling AI images is good practice); only_if_required:true skips the stamp when the label is not a duty. ' +
-      'The label takes the smallest legible form and the least invasive spot (bottom right first); pass region when only part of the image is AI, and color auto for a branded graphic. ' +
+      'The label is the EU "AI" icon alone, 18 px as the image is shown on a phone, in the least invasive spot (bottom right first); pass short:true when the user wants the word, region when only part of the image is AI, and avoid boxes for faces, people, the product and text. ' +
       'Pass description (what the image shows) to get the alt text. Never use it to mark AI output as human-made. A checklist, not legal advice.',
     inputSchema: {
       type: 'object',
@@ -138,9 +191,13 @@ export const TOOLS = [
         description: labelProps.description,
         position: positionProp,
         region: regionProp,
+        ...placeProps,
         display_width: displayWidthProp,
         color: labelProps.color,
-        minimal: { type: 'boolean', description: 'Pick the form yourself: true for no text, false for a word. By default a voluntary label is minimal and a required one has a word' },
+        form: labelProps.form,
+        icon: labelProps.icon,
+        short: labelProps.short,
+        minimal: { type: 'boolean', description: 'Same as form: "minimal"; false asks for a word (short)' },
         full: labelProps.full,
         only_if_required: { type: 'boolean', description: 'Stamp only when the AI Act requires the label' },
         force: { type: 'boolean', description: 'Overwrite an existing output, or stamp an image that is already labelled' },
@@ -268,6 +325,7 @@ export const TOOLS = [
         theme: { type: 'string', enum: ['auto', 'light', 'dark'], description: 'auto (default) picks the white or dark pill that stands out from the image; color sets your own' },
         position: positionProp,
         region: regionProp,
+        ...placeProps,
         display_width: displayWidthProp,
         metadata: { type: 'boolean', description: 'Write the IPTC DigitalSourceType tag, default true; the ai-content-labels marker that prevents double stamping is always written' },
         force: { type: 'boolean', description: 'Overwrite an existing output, or stamp a file that is already labelled' },
@@ -277,6 +335,64 @@ export const TOOLS = [
     },
     outputSchema: { type: 'object', properties: stampedProps, required: ['output', 'alt', 'disclosure', 'label'] },
     annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: 'place_label',
+    title: 'Place a label without stamping',
+    description:
+      'Work out where a label goes on an image and how it looks, exactly as stamp_image would, without writing anything: for HTML pages and UI that draw the label as HTML or SVG over the image. Returns the label box in px (box) and in % of the image (boxPercent, for CSS), the reason and the score of every spot, and renderArgs: the render_label arguments that draw the same label. Takes the same label and placement options as stamp_image. Call decide_label first for kind.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        input: { type: 'string', description: `The image: a file path or an http(s) URL. ${PATH_NOTE}` },
+        input_base64: sourceProps.input_base64,
+        mime: sourceProps.mime,
+        ...labelProps,
+        theme: { type: 'string', enum: ['auto', 'light', 'dark'], description: 'auto (default) picks the white or dark pill that stands out from the image; color sets your own' },
+        position: positionProp,
+        region: regionProp,
+        ...placeProps,
+        display_width: displayWidthProp,
+      },
+      required: ['kind'],
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        version: versionProp,
+        image: stampedProps.image,
+        label: labelBox,
+        box: {
+          type: 'object',
+          description: 'The label in image px',
+          properties: { left: { type: 'integer' }, top: { type: 'integer' }, width: { type: 'integer' }, height: { type: 'integer' } },
+        },
+        boxPercent: {
+          type: 'object',
+          description:
+            'The same box in % of the image width (left, width, right) and height (top, height, bottom), for CSS. anchor says which sides to pin: x left, center or right, y top or bottom; pin a bottom-right label with right and bottom',
+          properties: {
+            left: { type: 'number' },
+            top: { type: 'number' },
+            width: { type: 'number' },
+            height: { type: 'number' },
+            right: { type: 'number' },
+            bottom: { type: 'number' },
+            anchor: { type: 'object', properties: { x: { type: 'string', enum: ['left', 'center', 'right'] }, y: { type: 'string', enum: ['top', 'bottom'] } } },
+          },
+        },
+        renderArgs: { type: 'object', description: 'The render_label arguments that draw this label, to pass unchanged; height is the layout height in CSS px as seen, for an SVG scaled to the box (for format html use label.cssHeight)' },
+        warning: stampedProps.warning,
+        alt: stampedProps.alt,
+        altMissing: { type: 'string' },
+        disclosure: { type: 'string', description: 'The label sentence' },
+        contrast: { type: 'number' },
+        wcag: { type: 'boolean' },
+      },
+      required: ['version', 'label', 'box', 'boxPercent', 'renderArgs'],
+    },
+    annotations: { readOnlyHint: true, openWorldHint: true },
   },
   {
     name: 'eu_icon',
@@ -302,6 +418,9 @@ export const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   },
 ];
+
+// Every result carries the version that made it.
+for (const tool of TOOLS) tool.outputSchema.properties = { version: versionProp, ...tool.outputSchema.properties };
 
 const camel = (o) => Object.fromEntries(Object.entries(o ?? {}).map(([k, v]) => [k.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()), v]));
 
@@ -349,6 +468,12 @@ async function callTool(name, args, policy) {
       const { result, image } = await stampFrom(a, policy);
       return { structured: result, image };
     }
+    case 'place_label': {
+      // renderArgs go straight back into render_label, which takes snake_case arguments.
+      const result = await placeFrom(a, policy);
+      const snake = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`), v]));
+      return { structured: { ...result, renderArgs: snake(result.renderArgs) } };
+    }
     case 'eu_icon':
       noFiles();
       return { structured: await eu(a.name, a) };
@@ -364,7 +489,9 @@ async function callResult(params, policy) {
   const problem = typeof args === 'object' && !Array.isArray(args) ? checkArgs(tool, args) : 'arguments must be an object';
   if (problem) return { content: [{ type: 'text', text: problem }], isError: true };
   try {
-    const { structured, image } = await callTool(tool.name, args, policy);
+    const { structured: result, image } = await callTool(tool.name, args, policy);
+    // Every result says which version made it, first.
+    const structured = { version: VERSION, ...result };
     const content = [{ type: 'text', text: JSON.stringify(structured, null, 2) }];
     if (image) content.push({ type: 'image', data: image.buffer.toString('base64'), mimeType: image.mimeType });
     return { content, structuredContent: structured };
@@ -379,7 +506,7 @@ async function callResult(params, policy) {
 // argument and keep the CLI option in brackets: "pass text (CLI: --text)". A message that quotes a
 // whole CLI command stays as it is.
 const SERVER_FLAGS = new Set(['http', 'port', 'host', 'token', 'allow-files', 'allow-origin']);
-const MCP_BOOLEANS = new Set(['force', 'minimal', 'short', 'uppercase', 'realistic', 'creative', 'modified']);
+const MCP_BOOLEANS = new Set(['force', 'icon', 'minimal', 'short', 'full', 'uppercase', 'realistic', 'creative', 'modified']);
 export function forMcp(message) {
   if (/ai-labelss/.test(message)) return message;
   const seen = new Set();

@@ -191,7 +191,7 @@ test('modern era: server/discover and per-request _meta, next to legacy initiali
   assert.equal(discover._meta['io.modelcontextprotocol/serverInfo'].name, 'ai-content-labels');
   assert.match(discover.instructions, /label_image/);
   assert.equal(r[2].result.resultType, 'complete');
-  assert.equal(r[2].result.tools.length, 5);
+  assert.equal(r[2].result.tools.length, 6);
   assert.equal(r[3].result.resultType, 'complete');
   assert.equal(r[3].result.structuredContent.required, true);
   assert.equal(r[4].error.code, -32022);

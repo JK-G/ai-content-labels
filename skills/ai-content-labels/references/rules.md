@@ -127,10 +127,12 @@ The icons page calls it the Code of Practice on marking and labelling of AI-gene
 Adherence is voluntary; non-signatories are bound by Article 50 directly, and using the icons does
 not make anyone a signatory.
 
-- **Measure 1.1 (design).** The icon or an equivalent label carries the capital letters "AI";
-  signatories are encouraged to add whether the content is generated or modified, for example as
-  text next to the icon (1.1(b)). Sizes and styles may vary as long as the label stays clear,
-  accessible and distinguishable (1.1(c)). Where visual disclosure is not possible, such as
+- **Measure 1.1 (design).** The icon or an equivalent label carries the capital letters "AI" as its
+  main element (1.1(a), a "will"); signatories are only "encouraged" to add whether the content is
+  generated or modified, for example as text in or next to the icon (1.1(b)). The icon "may appear
+  in different sizes depending on the context" as long as it stays "readable and recognisable to
+  natural persons" (1.1(c)); the Code gives no minimum in px or mm, and the Commission's icon page
+  asks only for a "clearly visible size". Where visual disclosure is not possible, such as
   audio-only content, a short audible disclaimer in plain language goes at the beginning.
 - **Sub-measure 1.2.1 (placement).** Immediate recognition without user action (a), visible long
   enough to be noticed (b), embedded in the content unless an equivalent alternative such as an
@@ -159,14 +161,30 @@ not make anyone a signatory.
 - **Commitment 4 (editorial review).** Deployers outside the media sector keep a policy that names
   the person with editorial responsibility (name, role, contact) and publish those contact details.
 
+## How small a label can be
+
+Neither the Code nor the icon page sets a size, so this project takes the floor from legibility:
+
+- The EU minimum eyesight for driving is a binocular visual acuity "of at least 0,5" (Commission
+  Directive 2009/113/EC, Annex III, 6.1). At 0.5 a just-recognisable letter is 10 minutes of arc
+  tall (at 1.0, 5 minutes).
+- People hold a phone about 32.2 cm from the eyes when reading a web page (Bababekova et al. 2011,
+  Optometry and Vision Science 88(7):795-797, <https://pubmed.ncbi.nlm.nih.gov/21499163/>).
+- A CSS px on a current phone is about 0.166 mm (an iPhone: 1179 device px across, 460 ppi, 3 device
+  px per CSS px), so it spans about 1.77 minutes of arc at 32.2 cm, and a letter needs 5.65 CSS px.
+- The "AI" letters of the EU disc are 0.386 of the disc (measured on the official file), so the disc
+  needs 14.6 px; the tool uses 16 px, 18 px with its ring. A word needs an x-height of 5.65 px;
+  Inter's x-height is 0.546 em, so the type is 10.5 px, which an 18 px pill holds.
+
 ## How the tool maps these rules
 
 | Rule | What ai-content-labels does |
 |---|---|
 | Embedded, visible after download and reshare (Code Sub-measure 1.2.1(c)) | `stamp` burns the label into the pixels |
-| Perceivable at first exposure, clearly visible size (Code Sub-measure 1.2.1(a) and (d)) | The smallest legible stamp: 24 px tall with text, 20 px minimal, as the image is shown full width on a phone (390 CSS px), never below that in the file or above 512 px; refused when the image is too small for it. Placed automatically in the least invasive free spot: the bottom-right corner, else bottom centre or bottom left, else the top edge (the Code's example is the top right corner). Any corner meets 1.2.2(a) as long as nothing covers the label; `--position` overrides it per platform |
-| Sizes and styles may vary if the label stays clear (Code Measure 1.1(c)) | Optional label colour (`--color`, or `auto` from the image's accent) on an opaque pill, with white or dark text that keeps 4.5:1; the EU disc stays in its official black or white |
-| Plain-language text with "generated" or "modified" (Code Measure 1.1(b)) | Text next to the basic EU icon in the content's language |
+| Perceivable at first exposure, clearly visible size (Code Sub-measure 1.2.1(a) and (d)) | The smallest legible stamp (see "How small a label can be"): 18 px tall for the icon and for a label with a word, 20 px minimal, as the image is shown full width on a phone (390 CSS px), never below that in the file or above 512 px; refused when the image is too small for it. Labels are laid out at the size they are seen, so the type is 10.5 px or more on the phone. Placed automatically in the least invasive free spot: the bottom-right corner, else bottom centre or bottom left, else the top edge (the Code's example is the top right corner). Any corner meets 1.2.2(a) as long as nothing covers the label; `--safe-zone` keeps it out of the edges a platform covers with its own buttons and captions, `--avoid` keeps it off faces, people, the product and text, and `--position` overrides it per platform. `place` returns the same spot for labels drawn as HTML or SVG over an image |
+| The capital letters "AI" as the main element (Code Measure 1.1(a)) | `stamp`, `label` and `place` give an AI label the official EU disc alone by default (the icon form), unchanged in proportion, with a thin ring in the letters' colour so it holds on a backdrop of its own colour |
+| Sizes and styles may vary if the label stays "readable and recognisable" (Code Measure 1.1(c)) | Sizes from 18 px as seen on a phone, by the legibility floor above. Optional label colour (`--color`, or `auto` from the image's accent) on an opaque pill, with white or dark text that keeps 4.5:1; the EU disc stays in its official black or white |
+| Plain-language text with "generated" or "modified", encouraged (Code Measure 1.1(b)) | `--short` (or `--full`) puts the word next to the basic EU icon in the content's language; `render` and human-made labels have it by default. The label sentence is always in the alt text |
 | Accessibility (Article 50(5), Guidelines para 142, WCAG) | 4.5:1 text contrast on any backdrop, `role="img"`, `lang` and `aria-label` in the SVG, real text with `render --format html`, alt text and the label sentence returned by every command |
 | Audio-only (Code Measure 1.1, audio; Sub-measure 1.2.3) | `decide` tells you to add an audible disclaimer at the start, in the language of the recording, and to repeat it in long or live recordings |
 | Video seen from the middle (Code Sub-measure 1.2.2(b); Guidelines para 143) | `decide` tells you to show the label from the start, repeat it at regular intervals where possible and at least after breaks, as the Code asks. Keeping it for the whole video, which the Code encourages, is this project's recommendation |

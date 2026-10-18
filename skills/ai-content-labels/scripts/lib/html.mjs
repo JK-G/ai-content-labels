@@ -36,13 +36,56 @@ export const LABEL_CSS = `.ai-label{color-scheme:inherit;--ai-label-bg:light-dar
 @media (forced-colors:active){.ai-label-pill{border-color:CanvasText}.ai-label-disc{fill:CanvasText}.ai-label-glyph{fill:Canvas}.ai-label-rule{background:CanvasText}}
 `;
 
+// With a height, the pill is exactly that many CSS px tall and laid out like the SVG label at that
+// height: the mark is the SVG's disc (N minus an inset of 0.125N, or for words under 24 px 1 px at
+// 18 growing to 3 px at 24), the padding is the inset less the 1px border, and min-height is
+// lifted, so the pill is border + padding + disc + padding + border = N. The label's font size is
+// the disc / 1.875 (the mark is 1.875em), and the words get the SVG label's type size at that height
+// (10.5 px or more under 24 px, 0.44N to 28, then 0.4N; spaced capitals never under 10 px).
+export function heightStyles(o) {
+  const N = o.height;
+  const compact = !o.minimal && N < 24;
+  const inset = compact ? 1 + (N - 18) / 3 : N * 0.125;
+  const pad = round(inset - 1, 3);
+  const text = o.uppercase ? Math.max(10, N < 28 ? N * 0.37 : N * 0.34) : compact ? Math.max(10.5, N * 0.44) : N < 28 ? N * 0.44 : N * 0.4;
+  return {
+    root: `font-size:${round((N - 2 * inset) / 1.875, 3)}px`,
+    text: ` style="font-size:${round(text, 3)}px"`,
+    pill: ` style="min-height:0;padding:${pad}px 1em ${pad}px ${pad}px"`,
+    bare: ` style="min-height:0;padding:${pad}px"`,
+  };
+}
+
+// The icon form: the EU disc alone with its thin ring, as inline SVG in an 18-unit box (a 16-unit
+// disc and a 1-unit ring), coloured by the page's scheme like the mark in the pill. 1.5em by
+// default (18 px or more, as the type is 12 px or more), or exactly --height px.
+function iconHtml(o, input) {
+  const eu = euBasic();
+  const [vx, vy, vw] = eu.viewBox;
+  const size = input.height != null ? `width:${o.height}px;height:${o.height}px` : 'width:1.5em;height:1.5em';
+  const svg =
+    `<svg class="ai-label-mark" aria-hidden="true" focusable="false" viewBox="0 0 18 18" style="${size}"><circle class="ai-label-glyph" cx="9" cy="9" r="9"/>` +
+    `<g transform="translate(1 1) scale(${round(16 / vw, 5)}) translate(${-vx} ${-vy})"><path class="ai-label-disc" d="${eu.circle}"/>` +
+    `${eu.letters.map((d) => `<path class="ai-label-glyph" d="${d}"/>`).join('')}</g></svg>`;
+  const said = sentence({ kind: o.kind, media: o.media, text: o.text, lang: o.lang });
+  const scheme = input.theme === 'light' || input.theme === 'dark' ? ` data-theme="${input.theme}"` : '';
+  const html = `<span class="ai-label" role="note" lang="${o.lang}"${scheme}>${svg}<span class="ai-label-sr">${xml(said)}</span></span>`;
+  const alt = composeAlt(o);
+  return { html, css: LABEL_CSS, alt, ...altMissing(o, alt), disclosure: said };
+}
+
 export function renderHtml(input = {}) {
   const o = normalize(input);
+  if (o.icon) return iconHtml(o, input);
+  // Without --height the label follows the page's font size (never under 12 px), as before.
+  const sized = input.height != null ? heightStyles(o) : null;
   const s = strings(o.lang);
   const pick = (kind) => (o.short ? s[kind].short : s[kind].label);
-  const pills = [pill({ kind: o.kind, text: o.text ?? pick(o.kind), media: o.media, own: o.text, o })];
-  if (o.kind !== 'human' && o.human.length) pills.push(pill({ kind: 'human', text: o.humanText ?? pick('human'), media: o.human, own: o.humanText, o }));
-  const theme = o.color ? ` style="${colorVars(o.color)}"` : input.theme === 'light' || input.theme === 'dark' ? ` data-theme="${input.theme}"` : '';
+  const pills = [pill({ kind: o.kind, text: o.text ?? pick(o.kind), media: o.media, own: o.text, o, sized })];
+  if (o.kind !== 'human' && o.human.length) pills.push(pill({ kind: 'human', text: o.humanText ?? pick('human'), media: o.human, own: o.humanText, o, sized }));
+  const style = [sized?.root, o.color && colorVars(o.color)].filter(Boolean).join(';');
+  const scheme = !o.color && (input.theme === 'light' || input.theme === 'dark') ? ` data-theme="${input.theme}"` : '';
+  const theme = (style ? ` style="${style}"` : '') + scheme;
   const cls = o.uppercase ? 'ai-label ai-label-upper' : 'ai-label';
   const html = `<span class="${cls}" role="note" lang="${o.lang}"${theme}>${pills.map((p) => p.html).join(' ')}</span>`;
   const disclosure = pills.map((p) => p.sentence).join(' ');
@@ -59,27 +102,28 @@ function colorVars(hex) {
   return `--ai-label-bg:${t.background};--ai-label-ink:${t.ink};--ai-label-line:rgb(${rgb}/${t.borderOpacity});--ai-label-rule:rgb(${rgb}/.35);--ai-label-disc:${disc};--ai-label-glyph:${glyph}`;
 }
 
-function pill({ kind, text, media, own, o }) {
+function pill({ kind, text, media, own, o, sized }) {
   const said = sentence({ kind, media, text: own, lang: o.lang });
   const sr = (t) => `<span class="ai-label-sr">${xml(t)}</span>`;
+  const size = sized ? sized.text : '';
   // Visible words plus the rest of the sentence for screen readers: "Generated with AI" + ": image."
   const continues = !o.minimal && said.startsWith(text);
   // The words, icons and screen-reader text sit in one wrapping body, so in a narrow column the
   // icons move under the words instead of the words breaking letter by letter.
   const body = [];
   if (o.minimal) body.push(sr(said));
-  else if (continues) body.push(`<span class="ai-label-text">${xml(text)}</span>`);
+  else if (continues) body.push(`<span class="ai-label-text"${size}>${xml(text)}</span>`);
   // Short wording ("Generated") is not the start of the sentence: show it, read the full sentence.
-  else body.push(`<span class="ai-label-text" aria-hidden="true">${xml(text)}</span>${sr(said)}`);
+  else body.push(`<span class="ai-label-text" aria-hidden="true"${size}>${xml(text)}</span>${sr(said)}`);
   if (media.length) body.push(`<span class="ai-label-media">${rule()}${icons(media)}</span>`);
   if (continues && said.length > text.length) body.push(sr(said.slice(text.length)));
   // A bare minimal badge has only the screen-reader text, which takes no room: no body, no gap.
   const bare = o.minimal && !media.length;
   const parts = bare ? [mark(kind), ...body] : [mark(kind), `<span class="ai-label-body">${body.join('')}</span>`];
-  return { html: wrap(parts, bare), sentence: said };
+  return { html: wrap(parts, bare, sized), sentence: said };
 }
 
-const wrap = (parts, bare) => `<span class="ai-label-pill${bare ? ' ai-label-bare' : ''}">${parts.join('')}</span>`;
+const wrap = (parts, bare, sized) => `<span class="ai-label-pill${bare ? ' ai-label-bare' : ''}"${sized ? (bare ? sized.bare : sized.pill) : ''}>${parts.join('')}</span>`;
 const rule = () => '<span class="ai-label-rule" aria-hidden="true"></span>';
 
 // The author mark in a 24×24 box: the EU "AI" disc, or the hand in the same disc.

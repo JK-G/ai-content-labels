@@ -227,14 +227,27 @@ test('image advice: the least invasive spot, the AI part of a composite, legible
   assert.match(advice, /legible full width on a phone/);
 });
 
-test('the next step takes the smallest form that fits: minimal when voluntary, a word when required or human', () => {
-  const voluntary = decide({ media: 'image', origin: 'generated', realistic: false });
-  assert.equal(voluntary.next.arguments.minimal, true);
-  assert.match(voluntary.next.cli, / --minimal/);
-  assert.ok(voluntary.notes.some((n) => /smallest form \(minimal\)/.test(n)));
+test('the next step names no form: the EU icon by default, the word on request', () => {
+  const forms = ['form', 'icon', 'minimal', 'short', 'full'];
+  for (const d of [
+    decide({ media: 'image', origin: 'generated', realistic: false }),
+    decide({ media: 'image', origin: 'generated', realistic: true }),
+    decide({ media: 'image', origin: 'human' }),
+    decide({ media: 'text', origin: 'generated', publicInterest: false }),
+  ]) {
+    for (const k of forms) assert.equal(d.next.arguments[k], undefined, k);
+    assert.doesNotMatch(d.next.cli, / --(minimal|icon|short|full)/);
+  }
   const required = decide({ media: 'image', origin: 'generated', realistic: true });
-  assert.equal(required.next.arguments.minimal, undefined);
-  assert.ok(required.notes.some((n) => /short form/.test(n) && /caption/.test(n)));
-  assert.equal(decide({ media: 'image', origin: 'human' }).next.arguments.minimal, undefined);
-  assert.equal(decide({ media: 'text', origin: 'generated', publicInterest: false }).next.arguments.minimal, true);
+  const note = required.notes.find((n) => n.includes('Measure 1.1(a)'));
+  assert.ok(note, 'the note names Measure 1.1(a)');
+  assert.ok(note.includes('encouraged (1.1(b))'));
+  assert.match(note, /--short/);
+  assert.match(note, /caption/);
+  assert.ok(!decide({ media: 'image', origin: 'human' }).notes.some((n) => n.includes('Measure 1.1(a)')));
+  // Text, video and audio go to render_label, which keeps the word: no icon note there.
+  for (const media of ['text', 'video', 'audio']) {
+    const d = decide({ media, origin: 'generated', realistic: true, publicInterest: true, editorialReview: false });
+    assert.ok(!d.notes.some((n) => n.includes('Measure 1.1(a)')), media);
+  }
 });
