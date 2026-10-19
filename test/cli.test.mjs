@@ -238,6 +238,9 @@ test('decide asks instead of guessing, and exits with 2', () => {
   assert.match(cli('decide', '--media', 'image', '--origin', 'generated', '--no-realistic').stdout, /^NOT REQUIRED: /);
   assert.match(cli('decide', '--media', 'image', '--origin', 'generated', '--realistic').stdout, /^REQUIRED: /);
   assert.match(cli('decide', '--media', 'image', '--origin', 'generated', '--realistic', '--lang', 'pl').stdout, /^Label: .*--lang pl/m);
+  // A spelled-out answer after the flag is the answer, not a stray argument.
+  assert.match(cli('decide', '--media', 'image', '--origin', 'generated', '--realistic', 'false').stdout, /^NOT REQUIRED: /);
+  assert.match(cli('decide', '--media', 'image', '--origin', 'generated', '--realistic', 'yes').stdout, /^REQUIRED: /);
   const text = cli('decide', '--media', 'text', '--origin', 'generated');
   assert.equal(text.status, 2);
   assert.match(text.stdout, /^UNKNOWN: /);

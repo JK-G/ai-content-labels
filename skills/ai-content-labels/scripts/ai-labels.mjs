@@ -5,7 +5,7 @@ import { labelImage, NeedsAnswer } from './lib/label.mjs';
 import { agentInstructions, writeInstructions } from './lib/init.mjs';
 import { isUrl } from './lib/source.mjs';
 import { basename } from 'node:path';
-import { UsageError, parseBoolean, parseAnswer, UNSURE } from './lib/i18n.mjs';
+import { UsageError, parseBoolean, parseAnswer } from './lib/i18n.mjs';
 import { PHONE_WIDTH } from './lib/stamp.mjs';
 import { formOf, minHeightOf } from './lib/render.mjs';
 import { VERSION } from './lib/version.mjs';
@@ -152,8 +152,10 @@ const BOOLEAN = new Set(['modified', 'only-if-required', 'voluntary', 'write', '
 const LABEL = ['kind', 'media', 'human', 'lang', 'text', 'human-text', 'description', 'form', 'icon', 'short', 'full', 'uppercase', 'minimal', 'theme', 'color', 'height', 'background-opacity', 'allow-low-contrast'];
 // The options each command accepts; anything else is a typo and must not pass silently.
 const PLACE = ['position', 'region', 'region-mask', 'region-path', 'avoid', 'safe-zone', 'palette', 'display-width'];
-// Yes/no options that also take "unsure" (--realistic unsure, --realistic=unsure).
+// Yes/no options that also take "unsure" (--realistic unsure, --realistic=unsure). A spelled-out
+// answer after the flag (--realistic false) is read as its value, not as a stray argument.
 const ANSWERS = new Set(['realistic', 'public-interest', 'editorial-review']);
+const ANSWER_WORD = /^(true|false|yes|no|unsure)$/i;
 // Options that may be given more than once; they collect into a list.
 const REPEATABLE = new Set(['avoid']);
 const OPTIONS = {
@@ -183,7 +185,7 @@ function parseArgs(argv) {
       let [key, value] = a.slice(2).split(/=(.*)/s);
       if (key.startsWith('no-') && BOOLEAN.has(key.slice(3)) && value === undefined) {
         [key, value] = [key.slice(3), false];
-      } else if (ANSWERS.has(key) && (value !== undefined || String(argv[i + 1]).toLowerCase() === UNSURE)) {
+      } else if (ANSWERS.has(key) && (value !== undefined || ANSWER_WORD.test(String(argv[i + 1])))) {
         value = parseAnswer(value ?? argv[++i], `--${key}`);
       } else if (BOOLEAN.has(key)) {
         value = parseBoolean(value ?? true, `--${key}`);

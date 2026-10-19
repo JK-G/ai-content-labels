@@ -29,7 +29,7 @@ Every label comes as `.svg` (scales to any size), `-48.png` (web) and `-128.png`
 ## Placing it
 
 - A light label stands out on dark or busy images, a dark one on light images. Either keeps its text at 4.5:1 contrast or better on any background.
-- Put it where nothing covers it, for example in a corner. Keep it at least 24 px tall where people see it (20 px for the hand alone).
+- Put it where nothing covers it, for example in a corner. Keep the hand and labels with words at least 18 px tall where people see them, 20 px for `human-made-mark-<type>`.
 - Text inside an image is invisible to screen readers. Add the sentence to the alt text: "Made by a human: image." or "Stworzone przez człowieka: obraz."
 - To burn a label into a photo instead of placing it by hand: `ai-labels stamp photo.jpg --kind human --media image --description "what it shows"`.
 
