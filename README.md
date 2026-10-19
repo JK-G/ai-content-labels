@@ -2,9 +2,36 @@
 
 [![tests](https://github.com/JK-G/ai-content-labels/actions/workflows/test.yml/badge.svg)](https://github.com/JK-G/ai-content-labels/actions/workflows/test.yml)
 
-Labels for AI-generated and human-made content, built on the official EU icons, for any AI agent. It fits agents that generate images best. They already know the image is AI, so one call (`ai-labels label` or the MCP tool `label_image`) tells them whether the EU AI Act requires a label and burns it into the image when it does, or when nobody can tell. Where a label would only be voluntary, it adds nothing. ai-content-labels also draws labels that keep WCAG contrast on any background, writes them as HTML for web pages and hands you the alt text. It ships as a CLI, an MCP server (stdio and HTTP), a Node library and an Agent Skill that works in Codex, Gemini CLI, Copilot, Cursor and Claude Code.
+## TL;DR
+
+ai-content-labels marks AI-generated and human-made content with the official EU icons, from any AI agent. It tells the agent whether the EU AI Act requires a label, burns the label into the image when it does or when nobody can tell, and returns the alt text. It ships as a CLI, an MCP server, a Node library and an Agent Skill for Claude Code, Codex, Gemini CLI, Copilot and Cursor.
+
+[![Download AI labels (ZIP)](docs/download-ai-labels.svg)](https://github.com/JK-G/ai-content-labels/releases/latest/download/ai-generated-labels.zip) [![Download "Made by a human" labels (ZIP)](docs/download-human-made-labels.svg)](https://github.com/JK-G/ai-content-labels/releases/latest/download/human-made-labels.zip)
 
 ![Labels in a light and a dark theme: "Generated with AI" with an image icon, "Modified with AI" with image and voice icons, a custom "Voice generated with AI", an AI label next to a "Human-made" label, a Polish label and an upper-case label](docs/labels.png)
+
+What it does for an agent:
+
+- One call right after it generates an image: `ai-labels label`, or `label_image` over MCP.
+- A label only where the AI Act requires one (deep fakes, AI text on a matter of public interest without editorial review) or where nobody can tell, as a precaution.
+- Nothing where a label would only be voluntary, unless the user opts in with `--voluntary`.
+- The smallest legible label, the EU "AI" icon alone, in the spot where it covers the least, and the alt text for screen readers.
+- Labels for web pages as HTML, and ready-made AI and "Made by a human" label packs to place by hand.
+
+Install it in Claude Code:
+
+```
+/plugin marketplace add JK-G/ai-content-labels
+/plugin install ai-content-labels@ai-content-labels
+```
+
+Or run the CLI with no install (Node.js 20.9 or newer):
+
+```
+npx -y -p github:JK-G/ai-content-labels ai-labels label image.png --realistic --description "what it shows"
+```
+
+Any MCP client starts the server with `npx -y -p github:JK-G/ai-content-labels ai-content-labels-mcp`; client settings are under [MCP server](#mcp-server).
 
 Unofficial. Not affiliated with the European Commission, and not legal advice.
 
@@ -22,17 +49,27 @@ The icons leave the practical questions open. Does this image need a label at al
 - **`place`** works out where `stamp` would put the label, how big and in which colour, and writes nothing. It returns the box in px and in % of the image, and the `render` options that draw the same label, so a page or an HTML ad template can draw it as HTML or SVG over the image. Over MCP it is `place_label`.
 - **`render`** draws the same label as SVG, PNG or WebP, with `role="img"`, `lang` and an `aria-label`. With `--format html` it writes the label as real text and inline icons, for web pages and apps.
 - **Content-type icons** show which part was AI: image, text, audio, voice, music, video. A second label, "Made by a human", shows which part was not.
-- **A ready-made "Made by a human" pack** for people who label their own work by hand, no agent needed: SVG and PNG, English and Polish, light and dark, with or without a content-type icon. See below.
+- **Ready-made label packs** for people who place labels by hand, no agent needed: AI labels on the EU icon, and "Made by a human" labels. SVG and PNG, English and Polish, light and dark. See below.
 - **`eu`** gives you the twelve official EU files, unchanged.
 - **Languages:** English and Polish wording is built in. For the other 22 official EU languages, pass `--lang` with your own `--text` in that language (`--lang de --text "Mit KI generiert"`), so screen readers read the label with the right voice.
 
-## Label your own work: the "Made by a human" pack
+## Ready-made labels
 
-An AI agent should not be the one to call your work human-made. So the human-made labels also come as plain files you place yourself: [`labels/human-made`](labels/human-made) in this repo, or all of them in one ZIP (`human-made-labels.zip`) from the [latest release](https://github.com/JK-G/ai-content-labels/releases/latest).
+Both packs are plain files you place yourself, drawn by this project's renderer. Download them with the buttons at the top, from the [latest release](https://github.com/JK-G/ai-content-labels/releases/latest), or pick single files from the folders. Every label comes as SVG and as PNG at 48 and 128 px on a transparent background, in English and Polish, light and dark.
+
+### AI labels
+
+![The AI labels in English and Polish, light and dark](labels/ai-generated/preview.png)
+
+[`labels/ai-generated`](labels/ai-generated) has 120 labels on the EU "AI" icon: the icon alone, the icon with one content-type icon, one word ("Generated", "Modified"), the full wording ("Generated with AI", "Modified with AI", "Made with AI"), and the wording with one content-type icon. Use them where the label is required, or where you choose to label; the [pack's README](labels/ai-generated/README.md) says when the AI Act asks for one.
+
+### "Made by a human" labels
+
+An AI agent should not be the one to call your work human-made, so these labels are for you to place.
 
 ![The "Made by a human" labels in English and Polish, light and dark](labels/human-made/preview.png)
 
-There are 58 labels: the label with text, a short "Human-made" in English, the hand alone, and each of these with one content-type icon (image, text, audio, voice, music, video). Every label comes as SVG and as PNG at 48 and 128 px on a transparent background. Use them only where no generative AI was involved; the [pack's README](labels/human-made/README.md) has the rules, placement tips and credits.
+[`labels/human-made`](labels/human-made) has 58 labels: the label with text, a short "Human-made" in English, the hand alone, and each of these with one content-type icon (image, text, audio, voice, music, video). Use them only where no generative AI was involved; the [pack's README](labels/human-made/README.md) has the rules, placement tips and credits.
 
 ## Use it with your agent
 
@@ -52,12 +89,7 @@ Our test suite covers the CLI, the library, the stdio MCP server and the HTTP mo
 
 ### Claude Code
 
-```
-/plugin marketplace add JK-G/ai-content-labels
-/plugin install ai-content-labels@ai-content-labels
-```
-
-The plugin system does not run npm, so after a plugin install ask Claude to "run ai-content-labels doctor" and it will tell you the one command that adds sharp.
+Install the plugin with the two `/plugin` commands in the [TL;DR](#tldr). The plugin system does not run npm, so after a plugin install ask Claude to "run ai-content-labels doctor" and it will tell you the one command that adds sharp.
 
 ### Agent Skill
 
@@ -169,11 +201,7 @@ The built-in n8n MCP Client node speaks HTTP only, so point it at the `/mcp` add
 
 ### CLI
 
-```
-npx -y -p github:JK-G/ai-content-labels ai-labels label image.png --realistic --description "what it shows"
-```
-
-Installed with npm (`npm install -g github:JK-G/ai-content-labels`), the command is `ai-labels`, also available as `ai-content-labels`. From a clone, run `node skills/ai-content-labels/scripts/ai-labels.mjs`.
+The `npx` line in the [TL;DR](#tldr) runs the CLI with no install. Installed with npm (`npm install -g github:JK-G/ai-content-labels`), the command is `ai-labels`, also available as `ai-content-labels`. From a clone, run `node skills/ai-content-labels/scripts/ai-labels.mjs`.
 
 ### Node library
 

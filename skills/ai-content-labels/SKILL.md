@@ -266,6 +266,9 @@ Keep the label sentence in the alt text or caption as in step 4.
   look the same, in the icon and the minimal form alike, so the alt text must carry the difference.
 - The hand mark is this project's design, not an EU icon. It has no meaning under the AI Act.
   Where you use it, explain it once (a legend, caption or an "about our labels" page).
+- When the user wants to place an AI label by hand, point them to the ready-made files in
+  `labels/ai-generated` of the repository (or the `ai-generated-labels.zip` release asset), and
+  say whether the label is required for their content first.
 - The untouched EU files: `eu generated --variant black --out ai-generated.svg` (also `basic`,
   `modified`; variants `black`, `white`, `black-transparent`, `white-transparent`).
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Renders the README images in docs/ from the current renderer: node tools/make-docs.mjs
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -92,3 +92,14 @@ async function smallSheet(file, heights, { pad = 24, zoom = 4 } = {}) {
 }
 
 await smallSheet('small.png', [20, 24, 28, 32, 40]);
+
+// The download buttons at the top of the README: the label pill itself, with the release ZIP named
+// in its text. SVG, so GitHub shows it sharp at any zoom.
+const BUTTONS = [
+  ['download-ai-labels.svg', { kind: 'basic', text: 'Download AI labels (ZIP)' }],
+  ['download-human-made-labels.svg', { kind: 'human', text: 'Download "Made by a human" labels (ZIP)' }],
+];
+for (const [file, opts] of BUTTONS) {
+  writeFileSync(join(docs, file), renderLabel({ ...opts, theme: 'light', height: 36 }).svg + '\n');
+  console.log(`docs/${file}`);
+}
