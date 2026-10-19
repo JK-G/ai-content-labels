@@ -6,18 +6,6 @@
 
 ai-content-labels marks AI-generated and human-made content with the official EU icons, from any AI agent. It tells the agent whether the EU AI Act requires a label, burns the label into the image when it does or when nobody can tell, and returns the alt text. It ships as a CLI, an MCP server, a Node library and an Agent Skill for Claude Code, Codex, Gemini CLI, Copilot and Cursor.
 
-[![Download AI labels (ZIP)](docs/download-ai-labels.svg)](https://github.com/JK-G/ai-content-labels/releases/latest/download/ai-generated-labels.zip) [![Download "Made by a human" labels (ZIP)](docs/download-human-made-labels.svg)](https://github.com/JK-G/ai-content-labels/releases/latest/download/human-made-labels.zip)
-
-![Labels in a light and a dark theme: "Generated with AI" with an image icon, "Modified with AI" with image and voice icons, a custom "Voice generated with AI", an AI label next to a "Human-made" label, a Polish label and an upper-case label](docs/labels.png)
-
-What it does for an agent:
-
-- One call right after it generates an image: `ai-labels label`, or `label_image` over MCP.
-- A label only where the AI Act requires one (deep fakes, AI text on a matter of public interest without editorial review) or where nobody can tell, as a precaution.
-- Nothing where a label would only be voluntary, unless the user opts in with `--voluntary`.
-- The smallest legible label, the EU "AI" icon alone, in the spot where it covers the least, and the alt text for screen readers.
-- Labels for web pages as HTML, and ready-made AI and "Made by a human" label packs to place by hand.
-
 Install it in Claude Code:
 
 ```
@@ -32,6 +20,20 @@ npx -y -p github:JK-G/ai-content-labels ai-labels label image.png --realistic --
 ```
 
 Any MCP client starts the server with `npx -y -p github:JK-G/ai-content-labels ai-content-labels-mcp`; client settings are under [MCP server](#mcp-server).
+
+To place labels by hand, download a ready-made pack:
+
+[![Download AI labels (ZIP)](docs/download-ai-labels.svg)](https://github.com/JK-G/ai-content-labels/releases/latest/download/ai-generated-labels.zip) [![Download "Made by a human" labels (ZIP)](docs/download-human-made-labels.svg)](https://github.com/JK-G/ai-content-labels/releases/latest/download/human-made-labels.zip)
+
+![Labels in a light and a dark theme: "Generated with AI" with an image icon, "Modified with AI" with image and voice icons, a custom "Voice generated with AI", an AI label next to a "Human-made" label, a Polish label and an upper-case label](docs/labels.png)
+
+What it does for an agent:
+
+- One call right after it generates an image: `ai-labels label`, or `label_image` over MCP.
+- A label only where the AI Act requires one (deep fakes, AI text on a matter of public interest without editorial review) or where nobody can tell, as a precaution.
+- Nothing where a label would only be voluntary, unless the user opts in with `--voluntary`.
+- The smallest legible label, the EU "AI" icon alone, in the spot where it covers the least, and the alt text for screen readers.
+- Labels for web pages as HTML, and ready-made AI and "Made by a human" label packs to place by hand.
 
 Unofficial. Not affiliated with the European Commission, and not legal advice.
 
