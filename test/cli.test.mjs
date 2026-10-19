@@ -104,7 +104,7 @@ test('the printed command name is installed: ai-labels and ai-content-labels poi
   assert.match(cli('help').stdout, /^ai-labels <command>/);
   const next = cli('decide', '--media', 'image', '--origin', 'generated', '--realistic').stdout.split('\n')[1];
   assert.ok(next.startsWith('Next: ai-labels '));
-  const json = JSON.parse(cli('decide', '--media', 'text', '--origin', 'generated', '--no-public-interest', '--json').stdout);
+  const json = JSON.parse(cli('decide', '--media', 'text', '--origin', 'generated', '--no-public-interest', '--voluntary', '--json').stdout);
   assert.equal(json.next.tool, 'render_label');
   assert.match(json.next.cli, /^ai-labels render --format html/);
 });
@@ -365,7 +365,7 @@ test('decide is short by default, names the next command, and explains on reques
 test('decide asks about editorial review for public-interest text', () => {
   const ask = cli('decide', '--media', 'text', '--origin', 'generated', '--public-interest');
   assert.equal(ask.status, 2);
-  assert.match(ask.stdout, /^UNKNOWN: .*editorial responsibility\? Rerun with --editorial-review or --no-editorial-review\./);
+  assert.match(ask.stdout, /^UNKNOWN: .*editorial responsibility\? Rerun with --editorial-review or --no-editorial-review; if nobody can tell, with --editorial-review unsure, and the label is added as a precaution\./);
   assert.match(cli('decide', '--media', 'text', '--origin', 'generated', '--public-interest', '--editorial-review').stdout, /^NOT REQUIRED/);
   assert.match(cli('decide', '--media', 'text', '--origin', 'generated', '--public-interest', '--no-editorial-review').stdout, /^REQUIRED/);
   const json = JSON.parse(cli('decide', '--json', '--media', 'text', '--origin', 'generated', '--public-interest').stdout);

@@ -88,13 +88,15 @@ test('every verdict carries the next step as data: the MCP tool, its arguments a
   assert.equal(decide({ media: 'video', origin: 'modified', realistic: true }).next.tool, 'render_label');
   assert.deepEqual(decide({ media: 'video', origin: 'modified', realistic: true }).next.fill, ['out', 'height']);
   assert.match(decide({ media: 'audio', origin: 'generated', realistic: true }).next.note, /spoken disclaimer/);
-  // Voluntary verdicts get one too; a language without wording asks for the text.
+  // A human-made label keeps its next step; a language without wording asks for the text.
   assert.equal(decide({ media: 'image', origin: 'human' }).next.arguments.kind, 'human');
   const de = decide({ media: 'image', origin: 'generated', realistic: true, lang: 'de' }).next;
   assert.ok(de.fill.includes('text'));
   assert.match(de.cli, /--lang de --text "label in that language"/);
-  // No next step while decide still has a question.
-  assert.equal(decide({ media: 'image', origin: 'generated' }).next, undefined);
+  // While decide still has a question, next is the precautionary path: decide again with "unsure".
+  const ask = decide({ media: 'image', origin: 'generated' }).next;
+  assert.equal(ask.tool, 'decide_label');
+  assert.deepEqual(ask.arguments, { media: 'image', origin: 'generated', realistic: 'unsure' });
 });
 
 test('languages: any EU code; without built-in wording the sentence is left to the user', () => {
@@ -181,7 +183,7 @@ test('no verdict without the deciding fact: text needs public interest', () => {
 test('media and origin are both required', () => {
   assert.throws(() => decide({}), /needs --media and --origin/);
   assert.throws(() => decide({ media: 'image' }), /needs --media and --origin/);
-  assert.throws(() => decide({ media: 'image', origin: 'generated', realistic: 'maybe' }), /true or false/);
+  assert.throws(() => decide({ media: 'image', origin: 'generated', realistic: 'maybe' }), /true, false or unsure/);
 });
 
 test('verdicts carry the Guidelines test, the deployer scope and no "No duty" prefix', () => {
@@ -230,10 +232,11 @@ test('image advice: the least invasive spot, the AI part of a composite, legible
 test('the next step names no form: the EU icon by default, the word on request', () => {
   const forms = ['form', 'icon', 'minimal', 'short', 'full'];
   for (const d of [
-    decide({ media: 'image', origin: 'generated', realistic: false }),
+    decide({ media: 'image', origin: 'generated', realistic: false, voluntary: true }),
     decide({ media: 'image', origin: 'generated', realistic: true }),
+    decide({ media: 'image', origin: 'generated', realistic: 'unsure' }),
     decide({ media: 'image', origin: 'human' }),
-    decide({ media: 'text', origin: 'generated', publicInterest: false }),
+    decide({ media: 'text', origin: 'generated', publicInterest: false, voluntary: true }),
   ]) {
     for (const k of forms) assert.equal(d.next.arguments[k], undefined, k);
     assert.doesNotMatch(d.next.cli, / --(minimal|icon|short|full)/);

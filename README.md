@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/JK-G/ai-content-labels/actions/workflows/test.yml/badge.svg)](https://github.com/JK-G/ai-content-labels/actions/workflows/test.yml)
 
-Labels for AI-generated and human-made content, built on the official EU icons, for any AI agent. It fits agents that generate images best. They already know the image is AI, so one call (`ai-labels label` or the MCP tool `label_image`) tells them whether the EU AI Act requires a label and burns it into the image. ai-content-labels also draws labels that keep WCAG contrast on any background, writes them as HTML for web pages and hands you the alt text. It ships as a CLI, an MCP server (stdio and HTTP), a Node library and an Agent Skill that works in Codex, Gemini CLI, Copilot, Cursor and Claude Code.
+Labels for AI-generated and human-made content, built on the official EU icons, for any AI agent. It fits agents that generate images best. They already know the image is AI, so one call (`ai-labels label` or the MCP tool `label_image`) tells them whether the EU AI Act requires a label and burns it into the image when it does, or when nobody can tell. Where a label would only be voluntary, it adds nothing. ai-content-labels also draws labels that keep WCAG contrast on any background, writes them as HTML for web pages and hands you the alt text. It ships as a CLI, an MCP server (stdio and HTTP), a Node library and an Agent Skill that works in Codex, Gemini CLI, Copilot, Cursor and Claude Code.
 
 ![Labels in a light and a dark theme: "Generated with AI" with an image icon, "Modified with AI" with image and voice icons, a custom "Voice generated with AI", an AI label next to a "Human-made" label, a Polish label and an upper-case label](docs/labels.png)
 
@@ -16,8 +16,8 @@ The icons leave the practical questions open. Does this image need a label at al
 
 ## What it does
 
-- **`label`** is the one-call version for an image an agent has just generated or edited. You say whether people could take it for real; it runs `decide` and stamps the label `decide` picked. Voluntary labels are stamped too, unless you pass `--only-if-required`. Over MCP it is `label_image`, which also takes the image as a URL or base64 and can return the labelled image instead of writing a file.
-- **`decide`** goes through the Article 50(4) questions: would the audience take the content for real, is it an artistic work, is the text published on a matter of public interest, did a person review it. It returns whether the label is a duty or a voluntary choice, which label fits (and the official EU icon with the same meaning), where to place it, the label sentence and the next step, as a command and, in JSON and over MCP, as the tool call to make. When a deciding fact is missing, it asks one question instead of guessing. The answer is a few lines; `--explain` adds the legal basis, notes and sources.
+- **`label`** is the one-call version for an image an agent has just generated or edited. You say whether people could take it for real (`--realistic`, `--no-realistic`, or `--realistic unsure` when nobody can tell); it runs `decide` and stamps the label `decide` picked when the label is required or the answer is unsure. A voluntary label is not stamped unless you pass `--voluntary`. Over MCP it is `label_image`, which also takes the image as a URL or base64 and can return the labelled image instead of writing a file.
+- **`decide`** goes through the Article 50(4) questions: would the audience take the content for real, is it an artistic work, is the text published on a matter of public interest, did a person review it. It returns whether the label is a duty or a voluntary choice, which label fits (and the official EU icon with the same meaning), where to place it, the label sentence and the next step, as a command and, in JSON and over MCP, as the tool call to make. A voluntary AI label gets no next step unless you pass `--voluntary`. When a deciding fact is missing, it asks one question instead of guessing; when nobody knows the answer, `unsure` labels as a precaution. The answer is a few lines; `--explain` adds the legal basis, notes and sources.
 - **`stamp`** burns the label into a JPG, PNG, WebP, AVIF or TIFF, so it survives downloads and reshares as the EU guidance asks. You always say which label (`--kind`); stamp never assumes "Generated with AI". By default the label is the EU "AI" icon alone, as small as it can be while still readable on a phone, and it sits where it covers the least, bottom right first; see [Size, place and colour](#size-place-and-colour). For generated and modified labels an IPTC DigitalSourceType tag goes into the XMP; basic and human-made labels get only the project's marker, because the IPTC vocabulary has no term for them.
 - **`place`** works out where `stamp` would put the label, how big and in which colour, and writes nothing. It returns the box in px and in % of the image, and the `render` options that draw the same label, so a page or an HTML ad template can draw it as HTML or SVG over the image. Over MCP it is `place_label`.
 - **`render`** draws the same label as SVG, PNG or WebP, with `role="img"`, `lang` and an `aria-label`. With `--format html` it writes the label as real text and inline icons, for web pages and apps.
@@ -182,13 +182,14 @@ import { labelImage } from 'ai-content-labels';
 
 const result = await labelImage(imageBuffer, { realistic: true, description: 'What the image shows' });
 // result.buffer: the labelled image; result.alt: the alt text to publish; result.required: a legal duty or not
+// realistic: 'unsure' labels as a precaution; realistic: false stamps nothing (stamped: false) unless voluntary: true
 ```
 
 `labelImage` also takes a file path or an http(s) URL. The package exports `decide`, `renderLabel`, `renderHtml`, `stampImage`, `stampBuffer`, `placeLabel` and `officialIcon` as well. Every result has a `version` field.
 
 ## After your agent generates an image
 
-Run `ai-labels init --write` once in a project. It adds a short block to `AGENTS.md`, or to the file you name with `--file`, such as `GEMINI.md`. The block tells the agent to label every image it makes for publication, to answer the realism question honestly and to publish the alt text. Running it again updates the block in place.
+Run `ai-labels init --write` once in a project. It adds a short block to `AGENTS.md`, or to the file you name with `--file`, such as `GEMINI.md`. The block tells the agent to run `label` on every image it makes for publication, to answer the realism question honestly (`unsure` when nobody can tell) and to publish the alt text. Images whose label is only voluntary stay unlabelled; `init --write --voluntary` writes a block that labels them too. Running it again updates the block in place.
 
 Where the common image tools put their files, and the step after each:
 
@@ -205,11 +206,20 @@ Ask your agent in your own words: "label this image as AI-generated", "does this
 
 From the command line. `ai-labels` is the command the package installs; from a clone, run `node skills/ai-content-labels/scripts/ai-labels.mjs` instead.
 
-For an image an agent just made, `label` decides and stamps in one step:
+For an image an agent just made, `label` decides and, when a label is needed, stamps it in one step. A low-poly wolf would not be taken for a photo, so its label is voluntary and nothing is written:
 
 ```
 $ ai-labels label wolf.png --no-realistic --description "Low-poly grey wolf standing, front view"
-NOT REQUIRED: not a deep fake (would not be taken for real) (stamped anyway: labelling AI images is good practice; --only-if-required skips it)
+NOT REQUIRED: not a deep fake (would not be taken for real)
+Not labelled, and no file written: the label is voluntary here, so publish the original. To label it anyway, rerun with --voluntary.
+alt: Low-poly grey wolf standing, front view.
+```
+
+With `--voluntary` the same call stamps it:
+
+```
+$ ai-labels label wolf.png --no-realistic --voluntary --description "Low-poly grey wolf standing, front view"
+NOT REQUIRED: not a deep fake (would not be taken for real) (labelled because --voluntary is set)
 wolf.ai-label.png
 label: 58×58 px, icon, white disc, bottom-right (auto: bottom-right is free), mark contrast 16.88:1, stands out 16.01:1 from the image
 display: 18 px tall when the image is shown 390 px wide (full width on a phone; --display-width for other sizes)
@@ -218,13 +228,13 @@ alt: Low-poly grey wolf standing, front view. Generated with AI: image.
 metadata: XMP DigitalSourceType trainedAlgorithmicMedia
 ```
 
-The label is the EU "AI" icon alone, with the words in the alt text, whether the label is required (`--realistic`) or voluntary. `--short` adds the word "Generated" next to the icon. `--modified` is for a real photo that AI changed, and `--only-if-required` skips voluntary labels. Without a realism answer `label` asks the question below and exits with code 2.
+`--realistic` stamps the same label because it is required, and `--realistic unsure` stamps it as a precaution (the first line then starts with `UNSURE, LABEL AS A PRECAUTION`). The label is the EU "AI" icon alone, with the words in the alt text. `--short` adds the word "Generated" next to the icon, and `--modified` is for a real photo that AI changed. Without a realism answer `label` asks the question below and exits with code 2.
 
 For anything else, start with `decide`:
 
 ```
 $ ai-labels decide --media image --origin generated
-UNKNOWN: Would the people who will see it take it for a genuine photo, recording or event? Rerun with --realistic or --no-realistic.
+UNKNOWN: Would the people who will see it take it for a genuine photo, recording or event? Rerun with --realistic or --no-realistic; if nobody can tell, with --realistic unsure, and the label is added as a precaution.
 
 $ ai-labels decide --media image --origin generated --realistic
 REQUIRED: realistic AI image, a deep fake under Article 50(4)
@@ -247,7 +257,7 @@ $ ai-labels render --kind modified --media image,voice --human text --lang pl --
 $ ai-labels render --format html --kind generated --media text
 ```
 
-`decide` exits with code 2 when it has to ask, so a script cannot mistake a question for a verdict. For text published on a matter of public interest it also asks whether a person reviewed it (`--editorial-review`), because that decides the case. With `--json`, the field `missing` names the argument to answer, and after a verdict the field `next` holds the next call: the MCP tool, the arguments to pass unchanged, the ones still to fill in (`fill`) and the CLI line. `ai-labels help` lists every option.
+`decide` exits with code 2 when it has to ask, so a script cannot mistake a question for a verdict. For text published on a matter of public interest it also asks whether a person reviewed it (`--editorial-review`), because that decides the case. With `--json`, the field `missing` names the argument to answer, and `next` holds the next call: the MCP tool, the arguments to pass unchanged, the ones still to fill in (`fill`) and the CLI line. While decide still asks, `next` is the same decide call with the answer `unsure`, for when nobody can answer. For a voluntary AI label `next` is null and `optIn` says how to label anyway. `ai-labels help` lists every option.
 
 ## Which label
 
@@ -281,7 +291,7 @@ The icon and labels with text go down to 18 px, the minimal form to 20 px; see [
 
 Unless you or your agent choose otherwise, a stamped label takes the smallest form and size that still do the job, in the spot where it covers the least.
 
-- **Form.** The EU "AI" icon alone for an AI label, required or voluntary, with the words in the alt text. The Code of Practice on Transparency of AI-Generated Content asks for an icon whose main element is the letters "AI" (Measure 1.1(a)); text such as "generated" is encouraged, not required (1.1(b)). `--short` adds the word, `--full` the phrase. Human-made labels keep their words, because a hand alone is not a sign people know yet.
+- **Form.** The EU "AI" icon alone for an AI label, whether it is required, added as a precaution or voluntary (with `--voluntary`), with the words in the alt text. The Code of Practice on Transparency of AI-Generated Content asks for an icon whose main element is the letters "AI" (Measure 1.1(a)); text such as "generated" is encouraged, not required (1.1(b)). `--short` adds the word, `--full` the phrase. Human-made labels keep their words, because a hand alone is not a sign people know yet.
 - **Size.** 18 px tall for the icon and for a label with a word, 20 px for the minimal pill, as the image is shown full width on a phone (390 CSS px). A 1080 px wide image gets a 50 px label, or 56 px minimal. Larger screens show it larger. For an image never shown that small, pass the width it is shown at: `--display-width 1080` gives the same image an 18 px label.
 - **Why 18 px.** The Code lets the icon "appear in different sizes depending on the context" as long as it is "readable and recognisable to natural persons" (Measure 1.1(c)) and sets no minimum; the Commission's icon page asks for a "clearly visible size". So the floor comes from legibility. The EU minimum eyesight for driving is a visual acuity of 0.5 (Commission Directive 2009/113/EC, Annex III), which recognises a letter 10 minutes of arc tall. People hold a phone about 32 cm away when reading a web page ([Bababekova et al. 2011](https://pubmed.ncbi.nlm.nih.gov/21499163/)), where one CSS px is about 0.166 mm, so a letter needs 5.65 CSS px. The "AI" in the EU disc is 0.386 of the disc, so the disc is 16 px, 18 px with its ring. A word needs an x-height of 5.65 px, which Inter reaches at 10.5 px type; an 18 px pill holds it with a 1 px inset. Stamped labels are laid out at the size they are seen, so the type is 10.5 px or more on the phone, not just in the file.
 - **Place.** The bottom-right corner when it is free. If text, a logo or detail sits there, the freer of bottom centre and bottom left; if the whole bottom edge is taken, the top edge. The tool scores how busy each spot is (the mean brightness gradient under and around the label) and reports the scores with the spot it chose. `--position` picks a spot yourself.
@@ -292,6 +302,8 @@ Unless you or your agent choose otherwise, a stamped label takes the smallest fo
 - **HTML pages.** When the page draws the label itself, run `place` (MCP `place_label`) with the same options instead of `stamp`. Pin the label over the image by the sides `boxPercent.anchor` names (`right` and `bottom` for a bottom-right label), so it stays in its corner whatever its drawn width, and draw it with `render` and `renderArgs`. As SVG, draw it with `renderArgs` and let it scale with the image. As HTML (`--format html`), the height is in CSS px: pass `--height` with `label.cssHeight`, the label's height where the image is shown, and the pill is exactly that tall (at least 18 px, 20 px minimal).
 
 ## Upgrading
+
+0.6 stops labelling where the label is only voluntary. `label` and `label_image` stamp only when the label is required or the realism answer is `unsure`; for `--no-realistic` they write nothing and return `stamped: false`. `decide` returns `next: null` for a voluntary AI label. To keep the 0.5 behaviour, pass `--voluntary` (MCP `voluntary: true`). `--only-if-required` (`only_if_required`) is still accepted and does nothing. Required and precautionary labels look exactly as in 0.5.
 
 0.5 changed the stamped label again: `stamp`, `label` and `place` now give an AI label the EU icon alone, and the smallest size is 18 px as shown on a phone (50 px on a 1080 px wide image) instead of 24 px (67 px). Labels with words are laid out at the size they are seen, with a thinner inset under 24 px, so their pixels change too. `render` keeps its defaults: the same call draws the same SVG.
 
@@ -305,7 +317,7 @@ ai-labels stamp image.png --kind generated --media image --full --position top-l
 
 where `n = min(512, max(28, round(0.06 × shorter side), round(0.025 × longer side)))`: 65 for 1080×1080, 1080×1350 and 1080×1920, 72 for 1200×1200. `--display-width` with the image's own width lays the label out at its file size, as 0.1 to 0.3 did. In 0.3 a display width also raised the height to at least `ceil(28 × image width / display width)`; work that into `n` yourself. Over MCP pass `full: true`, `position: "top-left"`, `height` and `display_width`.
 
-0.4 had changed three defaults of 0.1 to 0.3: one word ("Generated") instead of the full wording, the smallest legible size instead of about 6% of the shorter side, and auto placement, bottom right first, instead of the top-left corner. A minimal label from `render` (`--minimal`) is the same SVG from 0.1.0 to 0.5.0, so tests that hash it keep passing. Since 0.5 every JSON result carries `version`, so a pipeline can check which version made it.
+0.4 had changed three defaults of 0.1 to 0.3: one word ("Generated") instead of the full wording, the smallest legible size instead of about 6% of the shorter side, and auto placement, bottom right first, instead of the top-left corner. A minimal label from `render` (`--minimal`) is the same SVG from 0.1.0 to 0.6.0, so tests that hash it keep passing. Since 0.5 every JSON result carries `version`, so a pipeline can check which version made it.
 
 ## Accessibility
 

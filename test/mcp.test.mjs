@@ -90,10 +90,12 @@ test('decide_label returns "unknown" with a question when a deciding fact is mis
   assert.match(unknown.question, /genuine photo/);
   assert.doesNotMatch(unknown.question, /--/);
   assert.equal(json(r[2]).required, false);
-  assert.equal(unknown.next, undefined);
-  // A voluntary label: the smallest form.
-  // No form: stamp_image uses the EU icon by default.
-  assert.deepEqual(json(r[2]).next.arguments, { kind: 'generated', media: ['image'], lang: 'en' });
+  // The precautionary path, for when nobody can answer: decide again with "unsure".
+  assert.equal(unknown.next.tool, 'decide_label');
+  assert.deepEqual(unknown.next.arguments, { media: 'image', origin: 'generated', realistic: 'unsure' });
+  // A voluntary label: no next call unless voluntary is set.
+  assert.equal(json(r[2]).next, null);
+  assert.match(json(r[2]).optIn, /voluntary: true/);
 });
 
 test('decide_label hands over the next call: tool, arguments to pass unchanged, arguments to fill in', async () => {

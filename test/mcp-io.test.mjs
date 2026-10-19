@@ -105,7 +105,7 @@ test('label_image with base64 and no out returns the image and writes nothing', 
   const out = join(dir, 'written.webp');
   const r = await session(
     [
-      call('label_image', { input_base64: data, realistic: false, description: 'A white card' }),
+      call('label_image', { input_base64: data, realistic: false, voluntary: true, description: 'A white card' }),
       call('label_image', { input_base64: `data:image/png;base64,${data}`, realistic: true, out }),
       call('label_image', { input_base64: data, realistic: false, only_if_required: true }),
     ],
@@ -379,4 +379,69 @@ test('stdio: a modern-shaped request with a legacy version gets -32022, and disc
   assert.equal(r[1].error.code, -32022);
   assert.equal(r[1].error.data.requested, '2025-06-18');
   assert.ok(r[2].result.supportedVersions.includes('2025-06-18'));
+});
+
+test('label_image labels only when required or unsure; voluntary opts in; only_if_required is a no-op', { skip: noSharp }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ai-labels-policy-'));
+  const input = join(dir, 'art.png');
+  writeFileSync(input, await png('#445566'));
+  const r = await session([
+    { method: 'tools/list' },
+    call('label_image', { input, realistic: false, description: 'Pixel-art mosaic', out: join(dir, 'voluntary.png') }),
+    call('label_image', { input, realistic: 'unsure', description: 'Pixel-art mosaic', out: join(dir, 'unsure.png') }),
+    call('label_image', { input, realistic: true, out: join(dir, 'required.png') }),
+    call('label_image', { input, realistic: false, voluntary: true, out: join(dir, 'opted.png') }),
+    call('label_image', { input, realistic: false, only_if_required: false }),
+    call('label_image', { input, realistic: 'maybe' }),
+    call('decide_label', { media: 'image', origin: 'generated', realistic: 'unsure' }),
+    call('decide_label', { media: 'image', origin: 'generated', realistic: false }),
+    call('decide_label', { media: 'image', origin: 'generated', realistic: false, voluntary: true }),
+    call('decide_label', { media: 'text', origin: 'generated' }),
+  ]);
+  const tools = Object.fromEntries(r[1].result.tools.map((t) => [t.name, t]));
+  const out = (i) => r[i].result.structuredContent;
+  for (const i of [2, 3, 4, 5, 6]) {
+    assert.notEqual(r[i].result.isError, true, r[i].result.content[0].text);
+    assert.equal(conforms(tools.label_image.outputSchema, out(i)), null, `call ${i}`);
+  }
+
+  const voluntary = out(2);
+  assert.equal(voluntary.stamped, false);
+  assert.equal(voluntary.output, null);
+  assert.equal(voluntary.label, null);
+  assert.equal(voluntary.disclosure, null);
+  assert.equal(voluntary.alt, 'Pixel-art mosaic.');
+  assert.match(voluntary.note, /voluntary: true/);
+  assert.equal(r[2].result.content.length, 1);
+  assert.equal(existsSync(join(dir, 'voluntary.png')), false);
+
+  const unsure = out(3);
+  assert.equal(unsure.stamped, true);
+  assert.equal(unsure.required, 'unsure');
+  assert.equal(unsure.precaution, true);
+  assert.match(unsure.note, /precaution/);
+  assert.equal(unsure.alt, 'Pixel-art mosaic. Generated with AI: image.');
+  assert.equal(unsure.label.form, out(4).label.form);
+  assert.ok(existsSync(join(dir, 'unsure.png')));
+
+  assert.equal(out(4).required, true);
+  assert.equal(out(5).stamped, true);
+  assert.equal(out(5).label.form, 'icon');
+  assert.equal(out(6).stamped, false);
+  assert.match(out(6).note, /only_if_required .* no effect/);
+  assert.equal(r[7].result.isError, true);
+  assert.match(r[7].result.content[0].text, /true, false or unsure/);
+
+  for (const i of [8, 9, 10, 11]) assert.equal(conforms(tools.decide_label.outputSchema, out(i)), null, `call ${i}`);
+  assert.equal(out(8).required, 'unsure');
+  assert.equal(out(8).next.tool, 'stamp_image');
+  assert.equal(out(9).next, null);
+  assert.match(out(9).optIn, /voluntary: true/);
+  assert.equal(out(10).next.tool, 'stamp_image');
+  assert.equal(out(11).required, 'unknown');
+  assert.deepEqual(out(11).next.arguments, { media: 'text', origin: 'generated', public_interest: 'unsure' });
+
+  assert.ok(tools.label_image.inputSchema.properties.voluntary);
+  assert.ok(tools.decide_label.inputSchema.properties.voluntary);
+  assert.doesNotMatch(tools.label_image.description, /good practice/);
 });

@@ -24,9 +24,11 @@ const SERVER_INFO = { name: 'ai-content-labels', version: VERSION };
 const PATH_NOTE = "Absolute path recommended; a relative path resolves against the server's working directory, which may not be your project.";
 
 const INSTRUCTIONS =
-  'Label AI-generated and human-made content with the official EU icon. If you generated or edited an image yourself, call label_image right after: it decides the label and stamps it in one call; you only answer realistic honestly. ' +
-  'For anything else call decide_label first; if it returns required:"unknown", ask the user its question and call it again. ' +
-  "Then make the call in decide_label's next: next.tool with next.arguments unchanged, plus the arguments named in next.fill (stamp_image for image files, render_label with format html for web pages and UI). " +
+  'Label AI-generated and human-made content with the official EU icon. Labels are for compliance, not decoration: an AI label is added only when the EU AI Act requires it, or when a deciding fact is unsure. ' +
+  'If you generated or edited an image yourself, call label_image right after: it decides and, when the label is required, stamps it in one call. You answer realistic honestly; if you cannot tell, ask the user, and if you cannot ask or the user does not know, pass realistic "unsure" and the label is added as a precaution. ' +
+  'Where the label is only voluntary, label_image adds nothing and writes no file (stamped: false): publish the original. Pass voluntary: true only when the user wants voluntary labels too. ' +
+  'For anything else call decide_label first; if it returns required:"unknown", ask the user its question and call it again (next then holds the call with that answer "unsure", for when nobody can answer). ' +
+  "When decide_label's next is null the label is voluntary and nothing more is needed. Otherwise make the call in next: next.tool with next.arguments unchanged, plus the arguments named in next.fill (stamp_image for image files, render_label with format html for web pages and UI). " +
   'For an HTML page or UI where the label is drawn as HTML or SVG over an image, call place_label instead of stamp_image: it writes nothing and returns the spot (box, boxPercent with its anchor) and renderArgs; draw the label with render_label and those arguments at boxPercent. renderArgs.height is the height the label is laid out at, right for an SVG scaled to boxPercent.width; for format html the height is in CSS px: pass label.cssHeight. ' +
   'Look at the image yourself and pass avoid boxes for faces, people, the product or subject, and text: the automatic spot sees only texture. ' +
   'Alt text = a short description of what the image shows, then the label sentence (disclosure); pass description so the result has it composed as alt. alt is null until you pass description; never publish disclosure as the alt of the image. ' +
@@ -116,6 +118,13 @@ const displayWidthProp = {
     'How wide the image will be shown, in CSS px; default 390, full width on a phone. The label is the smallest legible size there: 18 px for the icon or a label with a word, 20 px minimal. Pass a larger width only for images never shown full width on a phone. When the label has to shrink to fit, the result has a warning',
 };
 
+// A deciding fact: true, false, or "unsure" when nobody can tell (the label is then added as a precaution).
+const answerProp = (description) => ({ anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['unsure'] }], description });
+const voluntaryProp = {
+  type: 'boolean',
+  description: 'Also label where the label is only voluntary, in the smallest form (the EU icon alone). Default false: a voluntary label is not added. Pass it only when the user wants voluntary labels',
+};
+
 const nullable = (type) => ({ type: [type, 'null'] });
 const labelBox = {
   type: 'object',
@@ -171,20 +180,20 @@ export const TOOLS = [
     name: 'label_image',
     title: 'Label an AI image',
     description:
-      'Call this right after you generate or edit an image that will be published. In one call it decides which label the EU AI Act asks for (media image, origin generated, or modified with modified:true) and burns that label into the image, then returns the alt text and the label sentence to publish with it. ' +
-      'realistic is required: would the people who see it take it for a real photo or event? Answer honestly; ask the user if you cannot tell. ' +
-      'It stamps a voluntary label too (labelling AI images is good practice); only_if_required:true skips the stamp when the label is not a duty. ' +
+      'Call this right after you generate or edit an image that will be published. In one call it decides whether the EU AI Act requires a label (media image, origin generated, or modified with modified:true) and burns the label into the image only when it is required or when realistic is "unsure", then returns the alt text and the label sentence to publish with it. ' +
+      'realistic is required: would the people who see it take it for a real photo or event? Answer true or false honestly; ask the user if you cannot tell. If you cannot ask or the user does not know, pass "unsure": the label is then added as a precaution, in the same form as a required one. ' +
+      'Where the label is voluntary (realistic false), nothing is stamped or written, not even to out: stamped is false, output, label and disclosure are null, alt is the description alone, and you publish the original. voluntary:true stamps voluntary labels too; only_if_required is the default since 0.6.0 and has no effect. ' +
       'The label is the EU "AI" icon alone, 18 px as the image is shown on a phone, in the least invasive spot (bottom right first); pass short:true when the user wants the word, region when only part of the image is AI, and avoid boxes for faces, people, the product and text. ' +
       'Pass description (what the image shows) to get the alt text. Never use it to mark AI output as human-made. A checklist, not legal advice.',
     inputSchema: {
       type: 'object',
       properties: {
         ...sourceProps,
-        realistic: {
-          type: 'boolean',
-          description: 'Would the foreseeable audience take it for a genuine photo, recording or event? A person, product or place that does not exist but plausibly could counts; photorealism alone does not decide it',
-        },
+        realistic: answerProp(
+          'Would the foreseeable audience take it for a genuine photo, recording or event? A person, product or place that does not exist but plausibly could counts; photorealism alone does not decide it. "unsure" when nobody can tell: the label is added as a precaution'
+        ),
         modified: { type: 'boolean', description: 'true when AI changed a real photo or a human-made image; leave out when AI generated the whole image' },
+        voluntary: voluntaryProp,
         creative: { type: 'boolean', description: 'An evidently artistic, satirical or fictional work, obvious to its audience; news or a product shot does not count' },
         lang: labelProps.lang,
         text: { type: 'string', description: 'Own label text; needed for languages other than en and pl' },
@@ -199,7 +208,7 @@ export const TOOLS = [
         short: labelProps.short,
         minimal: { type: 'boolean', description: 'Same as form: "minimal"; false asks for a word (short)' },
         full: labelProps.full,
-        only_if_required: { type: 'boolean', description: 'Stamp only when the AI Act requires the label' },
+        only_if_required: { type: 'boolean', description: 'Deprecated, no effect: since 0.6.0 voluntary labels are skipped by default. Not with voluntary:true' },
         force: { type: 'boolean', description: 'Overwrite an existing output, or stamp an image that is already labelled' },
       },
       required: ['realistic'],
@@ -209,14 +218,17 @@ export const TOOLS = [
       type: 'object',
       properties: {
         verdict: { type: 'string' },
-        required: { type: 'boolean', description: 'Whether the AI Act requires the label' },
-        stamped: { type: 'boolean' },
+        required: { type: ['boolean', 'string'], description: 'Whether the AI Act requires the label: true, false, or "unsure" when realistic was unsure (labelled as a precaution)' },
+        precaution: { type: 'boolean', description: 'true when the label was added as a precaution, because realistic was "unsure"' },
+        stamped: { type: 'boolean', description: 'false when the label is voluntary and voluntary is not set: nothing was stamped or written' },
         officialIcon: nullable('string'),
         note: { type: 'string' },
         ...stampedProps,
+        output: { ...nullable('string'), description: 'Absolute path of the labelled file, or null when the image is returned as image content instead, or when nothing was stamped' },
+        alt: { ...nullable('string'), description: 'Alt text to publish: description, then the label sentence; the description alone when nothing was stamped. null until description is passed' },
         label: { ...labelBox, type: ['object', 'null'] },
-        // null when nothing was stamped in a language without built-in wording and no text was given.
-        disclosure: { ...nullable('string'), description: 'The label sentence' },
+        // null when nothing was stamped.
+        disclosure: { ...nullable('string'), description: 'The label sentence, or null when nothing was stamped' },
       },
       required: ['verdict', 'required', 'stamped', 'output', 'alt', 'disclosure'],
     },
@@ -226,27 +238,28 @@ export const TOOLS = [
     name: 'decide_label',
     title: 'Decide the AI label',
     description:
-      'Decide which AI label a piece of content needs and whether Article 50(4) of the EU AI Act requires it (deep fakes, public-interest text without editorial review). Returns a short verdict, the label to use, the EU icon, placement and accessibility rules, the label sentence (disclosure) and the next call in `next`: tool (stamp_image or render_label), arguments to pass unchanged, fill (the arguments you still supply, such as input and description) and the same step as a CLI line (cli). When a deciding fact is missing (realistic for image, video and audio; public_interest, or editorial_review for public-interest text) it returns required:"unknown", the argument in `missing` and one question: ask the user, never guess. A checklist, not legal advice. Call this before render_label or stamp_image; for an image you generated yourself, label_image does both steps.',
+      'Decide which AI label a piece of content needs and whether Article 50(4) of the EU AI Act requires it (deep fakes, public-interest text without editorial review). Returns a short verdict, the label to use, the EU icon, placement and accessibility rules, the label sentence (disclosure) and the next call in `next`: tool (stamp_image or render_label), arguments to pass unchanged, fill (the arguments you still supply, such as input and description) and the same step as a CLI line (cli). ' +
+      'An AI label is added only when it is required or a deciding fact is unsure: for a voluntary verdict `next` is null and `optIn` says how to label anyway (voluntary: true). A human-made label keeps its `next`. ' +
+      'When a deciding fact is missing (realistic for image, video and audio; public_interest, or editorial_review for public-interest text) it returns required:"unknown", the argument in `missing` and one question: ask the user, never guess. If you cannot ask, or the user does not know, answer "unsure": `next` then holds that call, and the verdict is required:"unsure" with precaution:true and the label a required one gets. ' +
+      'A checklist, not legal advice. Call this before render_label or stamp_image; for an image you generated yourself, label_image does both steps.',
     inputSchema: {
       type: 'object',
       properties: {
         media: { type: 'string', enum: ['image', 'video', 'audio', 'text'] },
         origin: { type: 'string', enum: ['generated', 'modified', 'assisted', 'human'], description: 'generated = fully by AI; modified = real content changed by AI; assisted = only standard edits; human = no generative AI' },
-        realistic: {
-          type: 'boolean',
-          description: 'Required for image, video and audio: would the foreseeable audience take it for a genuine photo, recording or event? Photorealism alone does not decide it; a person, product or place that does not exist but plausibly could counts.',
-        },
+        realistic: answerProp(
+          'Required for image, video and audio: would the foreseeable audience take it for a genuine photo, recording or event? Photorealism alone does not decide it; a person, product or place that does not exist but plausibly could counts. "unsure" when nobody can tell: label as a precaution.'
+        ),
         creative: {
           type: 'boolean',
           description: 'An evidently artistic, satirical or fictional work, obvious to its audience; read strictly, news or a product shot does not count, and an advertisement only in specific cases',
         },
-        public_interest: { type: 'boolean', description: 'Required for text: published to inform the public on matters of public interest' },
-        editorial_review: {
-          type: 'boolean',
-          description:
-            'A person with relevant knowledge checked the substance (at least fact-checked it; a spell-check or quick approval does not count), no AI changes after sign-off, and a named person or company holds editorial responsibility',
-        },
+        public_interest: answerProp('Required for text: published to inform the public on matters of public interest. "unsure" when nobody can tell'),
+        editorial_review: answerProp(
+          'A person with relevant knowledge checked the substance (at least fact-checked it; a spell-check or quick approval does not count), no AI changes after sign-off, and a named person or company holds editorial responsibility. "unsure" when nobody can tell'
+        ),
         lang: { type: 'string', enum: EU_LANGS, description: 'Built-in wording: en, pl; for other EU languages disclosure is null and you write the sentence' },
+        voluntary: { ...voluntaryProp, description: 'Give a next call for a voluntary verdict too, so the label is added where it is only voluntary. Default false: next is null for a voluntary AI label' },
       },
       required: ['media', 'origin'],
       additionalProperties: false,
@@ -254,15 +267,21 @@ export const TOOLS = [
     outputSchema: {
       type: 'object',
       properties: {
-        required: { type: ['boolean', 'string'], description: 'true, false, or "unknown" when a deciding fact is missing' },
+        required: {
+          type: ['boolean', 'string'],
+          description: 'true, false, "unknown" when a deciding fact is missing (ask the question), or "unsure" when a deciding fact was answered unsure (label as a precaution)',
+        },
         missing: { type: 'string' },
         question: { type: 'string' },
+        precaution: { type: 'boolean', description: 'true when the label is added as a precaution, because a deciding fact is unsure' },
+        unsure: { type: 'array', items: { type: 'string' }, description: 'The arguments answered "unsure" that make this a precaution' },
         verdict: { type: 'string' },
         basis: { type: 'string' },
         label: { type: ['object', 'null'] },
         officialIcon: nullable('string'),
         disclosure: nullable('string'),
-        next: { type: 'object' },
+        next: { type: ['object', 'null'], description: 'The next call; null when the label is voluntary and voluntary is not set' },
+        optIn: { type: 'string', description: 'For a voluntary verdict without voluntary: how to label anyway' },
         placement: { type: 'array', items: { type: 'string' } },
         accessibility: { type: 'array', items: { type: 'string' } },
         notes: { type: 'array', items: { type: 'string' } },
@@ -432,7 +451,9 @@ function checkArgs(tool, args) {
   const missing = (tool.inputSchema.required ?? []).filter((k) => args[k] == null);
   if (missing.length) {
     if (tool.name === 'stamp_image' && missing.includes('kind')) return 'stamp_image needs kind; call decide_label first';
-    if (tool.name === 'label_image') return 'label_image needs realistic: would the people who see the image take it for a real photo or event? Ask the user if you cannot tell';
+    if (tool.name === 'label_image') {
+      return 'label_image needs realistic: would the people who see the image take it for a real photo or event? Ask the user if you cannot tell; if you cannot ask or nobody knows, pass realistic "unsure" and the label is added as a precaution';
+    }
     return `${tool.name} needs ${missing.join(' and ')}`;
   }
   if (allowed.includes('input_base64')) {
@@ -506,7 +527,7 @@ async function callResult(params, policy) {
 // argument and keep the CLI option in brackets: "pass text (CLI: --text)". A message that quotes a
 // whole CLI command stays as it is.
 const SERVER_FLAGS = new Set(['http', 'port', 'host', 'token', 'allow-files', 'allow-origin']);
-const MCP_BOOLEANS = new Set(['force', 'icon', 'minimal', 'short', 'full', 'uppercase', 'realistic', 'creative', 'modified']);
+const MCP_BOOLEANS = new Set(['force', 'icon', 'minimal', 'short', 'full', 'uppercase', 'realistic', 'creative', 'modified', 'voluntary']);
 export function forMcp(message) {
   if (/ai-labelss/.test(message)) return message;
   const seen = new Set();

@@ -167,14 +167,15 @@ test('stamp: a given colour is used as is; auto takes the accent and keeps 4.5:1
 
 test('label_image: the EU icon alone, required or voluntary, and the caller can pick', { skip: noSharp }, async () => {
   const input = await graphic();
-  const voluntary = await labelImage(input, { realistic: false });
+  const voluntary = await labelImage(input, { realistic: false, voluntary: true });
   assert.equal(voluntary.label.form, 'icon');
+  assert.equal((await labelImage(input, { realistic: 'unsure' })).label.form, 'icon');
   const required = await labelImage(input, { realistic: true });
   assert.equal(required.label.form, 'icon');
   assert.equal((await labelImage(input, { realistic: true, short: true })).label.form, 'short');
   assert.equal((await labelImage(input, { realistic: true, form: 'minimal' })).label.form, 'minimal');
-  assert.equal((await labelImage(input, { realistic: false, full: true })).label.form, 'full');
-  assert.equal((await labelImage(input, { realistic: false, minimal: false })).label.form, 'short');
+  assert.equal((await labelImage(input, { realistic: false, voluntary: true, full: true })).label.form, 'full');
+  assert.equal((await labelImage(input, { realistic: false, voluntary: true, minimal: false })).label.form, 'short');
   assert.equal((await labelImage(input, { realistic: true, minimal: true })).label.form, 'minimal');
 });
 

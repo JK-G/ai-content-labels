@@ -1,9 +1,9 @@
 ---
 name: ai-content-labels
-description: Label content as AI-generated, AI-modified or human-made with the official EU icons, and work out what Article 50 of the EU AI Act asks for. Use right after you generate or edit an image that will be published, and when the user asks to label, mark, tag, badge or disclose AI content or human-made content, in any wording or language (AI label, AI badge, "generated with AI" watermark, made by a human, AI Act labelling, Article 50 disclosure; Polish - oznacz jako AI, plakietka AI, oznaczenie treści AI, znak AI Act, stworzone przez człowieka), when they ask whether something must be labelled under the AI Act, and when an image, video, audio or text made or edited with AI is about to be published in a project that labels AI content. Labels an image in one call, draws HTML, SVG or PNG labels for pages and UI, and returns the alt text to publish with the content.
+description: Label content as AI-generated, AI-modified or human-made with the official EU icons, and work out what Article 50 of the EU AI Act asks for. Use right after you generate or edit an image that will be published, and when the user asks to label, mark, tag, badge or disclose AI content or human-made content, in any wording or language (AI label, AI badge, "generated with AI" watermark, made by a human, AI Act labelling, Article 50 disclosure; Polish - oznacz jako AI, plakietka AI, oznaczenie treści AI, znak AI Act, stworzone przez człowieka), when they ask whether something must be labelled under the AI Act, and when an image, video, audio or text made or edited with AI is about to be published in a project that labels AI content. Labels an image in one call when the label is required or the answer is unsure, draws HTML, SVG or PNG labels for pages and UI, and returns the alt text to publish with the content.
 license: MIT
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
   homepage: https://github.com/JK-G/ai-content-labels
 ---
 
@@ -27,10 +27,28 @@ connected, the tools `label_image`, `decide_label`, `render_label`, `stamp_image
 missing, run the install command it prints (it knows whether this skill sits in a clone of the
 repository or was copied on its own), or use the `npx` line above.
 
+## When a label is added
+
+Labels are for compliance, not decoration. The tools add an AI label in two cases only:
+
+- **Required.** The AI Act asks for it: a deep fake, or AI text on a matter of public interest
+  without editorial review. The label is stamped or rendered as below.
+- **Unsure.** A deciding fact is not known. Ask the user the one question. If you cannot ask, or
+  the user does not know, answer `unsure` (`--realistic unsure`, MCP `realistic: "unsure"`; the
+  same for `--public-interest` and `--editorial-review`). The label is then added as a
+  precaution, in the same form as a required one, and the result says so (`required: "unsure"`,
+  `precaution: true`).
+
+Where the label is only voluntary (all facts known, no duty), nothing is stamped or rendered:
+`label` writes no file and `decide` gives no next step. Add `--voluntary` (MCP `voluntary: true`)
+only when the user wants voluntary labels too; they then get the smallest form, the EU icon alone.
+`ai-labels init --voluntary` writes that choice into a project's `AGENTS.md`. Human-made labels
+are the user's own claim and are not affected.
+
 ## An image you generated or edited yourself
 
-You already know it is AI and whether it looks real, so label it in one step, right after you make it
-and before you hand it over:
+You already know it is AI, so run `label` right after you make it and before you hand it over. It
+decides and, when the label is required or unsure, stamps it in one step:
 
 ```
 node scripts/ai-labels.mjs label image.png --realistic --description "what it shows"
@@ -38,13 +56,16 @@ node scripts/ai-labels.mjs label image.png --realistic --description "what it sh
 
 (MCP: `label_image` with `input` or `input_base64`, `realistic` and `description`.)
 
-- `--realistic` or `--no-realistic` is required: would the people who see it take it for a genuine
-  photo or event? Answer honestly; a person, product or place that does not exist but plausibly
-  could counts. If you cannot tell, ask the user. Without it, `label` asks the same question as
-  `decide` and exits with code 2.
+- `--realistic`, `--no-realistic` or `--realistic unsure` is required: would the people who see it
+  take it for a genuine photo or event? Answer honestly; a person, product or place that does not
+  exist but plausibly could counts. If you cannot tell, ask the user; if you cannot ask or the
+  user does not know, pass `--realistic unsure` and the label is added as a precaution. Without
+  any of them, `label` asks the same question as `decide` and exits with code 2.
 - `--modified` when you changed a real photo or a human-made image instead of making it from scratch.
-- It stamps a voluntary label too, because labelling AI images is good practice;
-  `--only-if-required` skips the stamp when the AI Act does not require the label.
+- With `--no-realistic` the label is voluntary: `label` stamps nothing and writes no file, not even
+  to `--out`. The result has `stamped: false`, `output`, `label` and `disclosure` null, and `alt` is
+  the description alone. Publish the original. `--voluntary` stamps it anyway.
+  `--only-if-required` is the default since 0.6.0 and does nothing.
 - `--lang pl` for a Polish label; `--out` for the output path (default `<name>.ai-label.<ext>` next
   to the image). Form, size, spot and colour follow the defaults in the next section: add `--region`
   (or `--region-path`) when only part of the image is AI, `--avoid` for what the label must not
@@ -58,8 +79,8 @@ Always label in the smallest legible form that fits the case, in the spot where 
 unless the user asks for something else or you have a stated reason. The tools do this by default, so
 mostly it means: do not override the defaults without a reason.
 
-- **Form.** Every AI label, required or voluntary, is the EU "AI" icon alone by default (`stamp`,
-  `label` and `place` do this for you), with the words in the alt text. The Code of Practice asks
+- **Form.** Every AI label, required, precautionary or voluntary, is the EU "AI" icon alone by
+  default (`stamp`, `label` and `place` do this for you), with the words in the alt text. The Code of Practice asks
   for the icon with the letters "AI" (Measure 1.1(a)); a word is only encouraged (1.1(b)). Add the
   word with `--short` ("Generated", "Modified") when the user wants it, or on feed ads (see "Which
   label"). Human-made labels keep their words, because a hand alone is not a sign people know.
@@ -149,20 +170,23 @@ Keep the label sentence in the alt text or caption as in step 4.
 
    Ask only for what you cannot infer, in one short question. If `decide` answers `UNKNOWN`
    (`required: "unknown"` over MCP), ask the one question it names in `missing` (`realistic`,
-   `public_interest` or `editorial_review`); never guess it. For public-interest text it always
-   asks about editorial review, because that decides the case.
+   `public_interest` or `editorial_review`); never guess it. If you cannot ask, or the user does
+   not know, answer `unsure` (`next` holds that call): the label is then added as a precaution.
+   For public-interest text it always asks about editorial review, because that decides the case.
 
    The duty binds deployers in the EU, and deployers elsewhere when they foresee the content being
    used in the EU, for example by publishing it on the open internet. A person acting in a purely
    personal, non-professional way has no duty; work for pay or regular economic benefit, as a
    freelancer or for an employer, is professional. If the user is clearly acting privately, say the
-   duty does not apply to them and offer the label as voluntary.
+   duty does not apply to them; add a label only if they want one (`--voluntary`).
 2. **Decide:** `decide --media image --origin generated --realistic --lang pl`. It says whether the
    label is a legal duty or a voluntary one, the next command to run, which label to use (and the
    official EU icon with the same meaning), where to put it, and the label sentence (`disclosure`).
    `--explain` adds the basis, notes and sources; `--json` always has everything. In JSON and over
    MCP, `next` holds the next call: `tool`, `arguments` to pass unchanged, `fill` (what you still
-   supply, such as `input` and `description`) and the same step as a CLI line (`cli`).
+   supply, such as `input` and `description`) and the same step as a CLI line (`cli`). For a
+   voluntary AI label `next` is null and you are done: no label is added unless the user asked for
+   voluntary labels (`--voluntary`).
 3. **Make the label:**
    - Image file: `stamp photo.jpg --kind generated --media image --lang pl --description "..."`.
      `--kind` is required: stamp never guesses the claim it burns in. For an image you made yourself, `label` does steps 2 and 3 at once. Writes `photo.ai-label.jpg`
@@ -211,7 +235,8 @@ Keep the label sentence in the alt text or caption as in step 4.
    - when the content's alt or caption already carries the sentence, give the separate label
      `alt=""` or `aria-hidden="true"`, so screen readers do not hear it twice.
 5. **Report back** in a few lines: what you labelled and where the files are, whether the label is
-   required or voluntary and on what basis, and anything you assumed.
+   required, precautionary (an `unsure` answer) or voluntary and on what basis, what you left
+   unlabelled because the label was only voluntary, and anything you assumed.
 
 ## Which label
 

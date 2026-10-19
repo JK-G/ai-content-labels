@@ -166,7 +166,7 @@ test('HTTP mode: file paths are off unless --allow-files; base64 in, image conte
   assert.ok((await sharp(Buffer.from(image.data, 'base64')).metadata()).xmp.toString().includes('VisibleLabel'));
 
   const files = await start('--allow-files');
-  const allowed = await send(files, { body: rpc(5, 'tools/call', { name: 'label_image', arguments: { input, realistic: false, out: join(tmp, 'h-out.png') } }) });
+  const allowed = await send(files, { body: rpc(5, 'tools/call', { name: 'label_image', arguments: { input, realistic: false, voluntary: true, out: join(tmp, 'h-out.png') } }) });
   assert.equal(allowed.json.result.structuredContent.output, join(tmp, 'h-out.png'));
   assert.ok(existsSync(join(tmp, 'h-out.png')));
 });

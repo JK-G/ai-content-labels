@@ -69,6 +69,18 @@ export function parseBoolean(value, name) {
   throw new UsageError(`${name} takes true or false, not "${value}"`);
 }
 
+// A deciding fact (realistic, public interest, editorial review): yes, no, or "unsure" when nobody
+// can tell. Absent stays undefined, so decide can ask; "unsure" gets a precautionary label.
+export const UNSURE = 'unsure';
+export function parseAnswer(value, name) {
+  if (typeof value === 'string' && value.trim().toLowerCase() === UNSURE) return UNSURE;
+  try {
+    return parseBoolean(value, name);
+  } catch {
+    throw new UsageError(`${name} takes true, false or unsure, not "${value}"`);
+  }
+}
+
 export const noWording = (lang, flag = '--text') =>
   `no built-in wording for "${lang}"; pass ${flag} in that language (plain words, e.g. ${flag} "Mit KI generiert")`;
 
