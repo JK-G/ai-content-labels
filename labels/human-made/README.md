@@ -1,10 +1,14 @@
 # "Made by a human" labels
 
+[![Download "Made by a human" labels (ZIP)](../../docs/download-human-made-labels.svg)](https://github.com/JK-G/ai-content-labels/releases/latest/download/human-made-labels.zip) [![Pobierz znaki „Stworzone przez człowieka” (ZIP)](../../docs/download-human-made-labels-pl.svg)](https://github.com/JK-G/ai-content-labels/releases/latest/download/human-made-labels.zip)
+
 Ready-made labels for work you made without generative AI. Download them and put them on your image, page or document yourself. No agent and no install needed.
+
+**Po polsku:** gotowe znaki „Stworzone przez człowieka” na pracę zrobioną bez generatywnej AI. Pobierz ZIP przyciskiem powyżej, polskie pliki są w folderze `pl/`. Znak wstawiasz sam, bez agenta i bez instalacji. To deklaracja wobec odbiorców, więc dawaj go tylko tam, gdzie jest prawdziwy.
 
 ![The labels in English and Polish, light and dark: "Made by a human", "Human-made", the hand alone, and versions with an image or text icon](preview.png)
 
-**Download:** every file in one ZIP, `human-made-labels.zip`, from the [latest release](https://github.com/JK-G/ai-content-labels/releases/latest), or pick single files from the folders below.
+**Download:** the button above gets every file in one ZIP, `human-made-labels.zip`, from the [latest release](https://github.com/JK-G/ai-content-labels/releases/latest). Or pick single files from the folders below.
 
 ## Use them honestly
 

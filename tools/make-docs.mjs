@@ -98,6 +98,7 @@ await smallSheet('small.png', [20, 24, 28, 32, 40]);
 const BUTTONS = [
   ['download-ai-labels.svg', { kind: 'basic', text: 'Download AI labels (ZIP)' }],
   ['download-human-made-labels.svg', { kind: 'human', text: 'Download "Made by a human" labels (ZIP)' }],
+  ['download-human-made-labels-pl.svg', { kind: 'human', lang: 'pl', text: 'Pobierz znaki „Stworzone przez człowieka” (ZIP)' }],
 ];
 for (const [file, opts] of BUTTONS) {
   writeFileSync(join(docs, file), renderLabel({ ...opts, theme: 'light', height: 36 }).svg + '\n');
